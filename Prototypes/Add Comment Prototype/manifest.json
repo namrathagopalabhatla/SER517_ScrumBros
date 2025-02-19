@@ -1,14 +1,14 @@
 {
-    "manifest_version": 3,
-    "name": "Scrum Bros Comments",
-    "version": "1.0",
-    "description": "Adds 'Hello, we are Scrum Bro's' above YouTube comments",
-    "permissions": ["activeTab"],
-    "content_scripts": [
-      {
-        "matches": ["*://*.youtube.com/*"],
-        "js": ["content.js"],
-        "css": ["styles.css"]
-      }
-    ]
-  }
+  "manifest_version": 3,
+  "name": "Scrum Bros Comments",
+  "version": "1.0",
+  "description": "Adds 'Hello, we are Scrum Bro's' above YouTube comments",
+  "permissions": ["activeTab"],
+  "content_scripts": [
+    {
+      "matches": ["*://*.youtube.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ]
+}
