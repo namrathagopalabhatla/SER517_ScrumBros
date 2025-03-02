@@ -95,6 +95,10 @@ async function analyzeSentiment(comments) {
             console.error("Request failed:", error.message);
         }
         return null;
+
+
+
+
     }
 }
 
@@ -126,6 +130,11 @@ async function saveSentimentData(videoId, analysis) {
 
     if (error) console.error("Error saving to Supabase:", error.message);
 }
+
+// API Endpoint to login
+app.post('/login', async (req, res) => {
+
+});
 
 // API Endpoint to Analyze a Video
 app.post('/analyze', async (req, res) => {
