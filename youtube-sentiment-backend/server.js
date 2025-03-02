@@ -10,6 +10,71 @@ const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
+const bcrypt = require('bcrypt');
+
+// Register API
+app.post('/register', async (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(400).json({ error: "Email and password are required" });
+    }
+
+    try {
+        // Hash the password before storing
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Insert user into Supabase
+        const { data, error } = await supabase
+            .from('users')
+            .insert([{ email, password: hashedPassword }])
+            .select();
+
+        if (error) {
+            console.error("Supabase insert error:", error.message);
+            return res.status(500).json({ error: "Failed to register user" });
+        }
+
+        res.json({ message: "User registered successfully", user: data[0] });
+    } catch (err) {
+        console.error("Error registering user:", err.message);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+// Login API
+app.post('/login', async (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(400).json({ error: "Email and password are required" });
+    }
+
+    try {
+        // Retrieve user from Supabase
+        const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', email)
+            .single();
+
+        if (error || !data) {
+            return res.status(401).json({ error: "Invalid email or password" });
+        }
+
+        // Compare password with the hashed password
+        const isMatch = await bcrypt.compare(password, data.password);
+        if (!isMatch) {
+            return res.status(401).json({ error: "Invalid email or password" });
+        }
+
+        res.json({ message: "Login successful", user: { id: data.id, email: data.email } });
+    } catch (err) {
+        console.error("Error logging in user:", err.message);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
 // Fetch YouTube Comments
 async function fetchYouTubeComments(videoId) {
     let comments = [];
@@ -126,6 +191,25 @@ async function saveSentimentData(videoId, analysis) {
 
     if (error) console.error("Error saving to Supabase:", error.message);
 }
+// api to test if supabase connection was successful
+app.get('/test-supabase', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('youtube_sentiment') // Replace with your actual table
+            .select('*')
+            .limit(1);
+
+        if (error) {
+            console.error("Supabase connection error:", error.message);
+            return res.status(500).json({ error: "Supabase connection failed." });
+        }
+
+        res.json({ message: "Supabase connected successfully!", sampleData: data });
+    } catch (err) {
+        console.error("Error testing Supabase connection:", err.message);
+        res.status(500).json({ error: "Internal server error." });
+    }
+});
 
 // API Endpoint to Analyze a Video
 app.post('/analyze', async (req, res) => {
