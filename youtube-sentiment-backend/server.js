@@ -2,6 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 app.use(express.json());
@@ -95,10 +97,6 @@ async function analyzeSentiment(comments) {
             console.error("Request failed:", error.message);
         }
         return null;
-
-
-
-
     }
 }
 
@@ -131,13 +129,112 @@ async function saveSentimentData(videoId, analysis) {
     if (error) console.error("Error saving to Supabase:", error.message);
 }
 
-// API Endpoint to login
-app.post('/login', async (req, res) => {
+// Middleware to authenticate user
+function authenticateToken(req, res, next) {
+    const token = req.headers['authorization'] && req.headers['authorization'].split(' ')[1];
 
+    if (!token) {
+        return res.status(403).json({ error: "Access denied. No token provided." });
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) {
+            return res.status(403).json({ error: "Invalid or expired token." });
+        }
+
+        req.user = user;
+        next();
+    });
+}
+
+// Register API Endpoint
+app.post('/register', async (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(400).json({ error: "Email and password are required." });
+    }
+
+    try {
+        // Check if user already exists
+        const { data: existingUser, error: userError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', email)
+            .single();
+
+        if (userError) {
+            return res.status(500).json({ error: "Error checking for existing user." });
+        }
+
+        if (existingUser) {
+            return res.status(400).json({ error: "User already exists." });
+        }
+
+        // Hash the password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Insert the new user into the database
+        const { data, error } = await supabase
+            .from('users')
+            .insert([{ email, password: hashedPassword }]);
+
+        if (error) {
+            return res.status(500).json({ error: "Error registering user." });
+        }
+
+        res.status(201).json({ message: "User registered successfully." });
+    } catch (error) {
+        console.error("Registration error:", error);
+        res.status(500).json({ error: "Server error." });
+    }
+});
+
+// Login API Endpoint
+app.post('/login', async (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(400).json({ error: "Email and password are required." });
+    }
+
+    try {
+        // Check if the user exists
+        const { data: user, error: userError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', email)
+            .single();
+
+        if (userError) {
+            return res.status(500).json({ error: "Error fetching user data." });
+        }
+
+        if (!user) {
+            return res.status(400).json({ error: "Invalid credentials." });
+        }
+
+        // Compare the hashed password
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ error: "Invalid credentials." });
+        }
+
+        // Generate a JWT token
+        const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET, {
+            expiresIn: '1h'
+        });
+
+        // Send the token in the response
+        res.json({ token });
+    } catch (error) {
+        console.error("Login error:", error);
+        res.status(500).json({ error: "Server error." });
+    }
 });
 
 // API Endpoint to Analyze a Video
-app.post('/analyze', async (req, res) => {
+app.post('/analyze', authenticateToken, async (req, res) => {
     const { videoId } = req.body;
     if (!videoId) return res.status(400).json({ error: "videoId is required" });
 
