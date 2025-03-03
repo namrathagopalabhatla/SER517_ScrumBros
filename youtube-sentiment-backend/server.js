@@ -12,12 +12,25 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANO
 
 const bcrypt = require('bcrypt');
 
-// Register API
+const bcrypt = require('bcrypt');
+
+// Function to validate password strength
+function isStrongPassword(password) {
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    return passwordRegex.test(password);
+}
+
+// Register API with password validation
 app.post('/register', async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
         return res.status(400).json({ error: "Email and password are required" });
+    }
+
+    // Check if password meets strength criteria
+    if (!isStrongPassword(password)) {
+        return res.status(400).json({ error: "Password must be at least 8 characters long and include at least one uppercase letter, one lowercase letter, one number, and one special character." });
     }
 
     try {
@@ -41,6 +54,7 @@ app.post('/register', async (req, res) => {
         res.status(500).json({ error: "Internal server error" });
     }
 });
+
 
 // Login API
 app.post('/login', async (req, res) => {
