@@ -3,12 +3,13 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "```sh\r mkdir youtube-sentiment-backend\r cd youtube-sentiment-backend\r npm init -y \r ```\r ## **Step 2: Install dependancies**\r ```sh\r npm install express axios dotenv @supabase/supabase-js openai\r ```\r ## **Step 3: Create .env file**\r ```ini\r YOUTUBE_API_KEY=YOUR_YOUTUBE_API_KEY\r OPENAI_API_KEY=YOUR_OPENAI_API_KEY\r SUPABASE_URL=YOUR_SUPABASE_URL\r SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY\r PORT=3000\r ```",
   "dependencies": {
     "@supabase/supabase-js": "^2.48.1",
     "axios": "^1.7.9",
@@ -16,5 +17,6 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "openai": "^4.85.1"
-  }
+  },
+  "devDependencies": {}
 }
