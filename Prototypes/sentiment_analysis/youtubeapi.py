@@ -3,8 +3,8 @@ import requests
 from textblob import TextBlob
 
 # YouTube API Key and Video ID
-API_KEY = "AIzaSyB4Ya0RZaRdq4cbQ9GUX4Cu8YRBWNWxdxQ"
-VIDEO_ID = "CnEOLuCojY0"
+API_KEY = "YOUR_YOUTUBE_API_KEY"
+VIDEO_ID = "VIDEO_ID"
 
 # YouTube API URL
 URL = f"https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId={VIDEO_ID}&key={API_KEY}&maxResults=100"
@@ -17,7 +17,7 @@ comments_data = response.json()
 conn = psycopg2.connect(
     dbname="youtube_analysis",
     user="postgres",
-    password="1234",
+    password="YOUR_DB_PASSWORD",
     host="localhost",
     port="5432"
 )
