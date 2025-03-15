@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Scrum Bros Comments",
+  "name": "Youtube Comment Analyser",
   "version": "1.0",
-  "description": "Adds 'Hello, we are Scrum Bro's' above YouTube comments",
+  "description": "A Chrome extension to analyze YouTube comments to give you a clear picture of viewer sentiments.",
   "permissions": ["activeTab"],
   "content_scripts": [
     {

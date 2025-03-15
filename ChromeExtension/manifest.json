@@ -1,17 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Comment Analyzer",
+  "name": "Youtube Comment Analyser",
   "version": "1.0",
-  "description": "Analyzes YouTube comments and provides a summary below the video.",
+  "description": "A Chrome extension to analyze YouTube comments to give you a unbiased viewer sentiment.",
   "permissions": ["scripting", "activeTab"],
-  "host_permissions": ["https://www.youtube.com/*"],
-  "background": {
-    "service_worker": "background.js"
-  },
   "content_scripts": [
     {
-      "matches": ["https://www.youtube.com/watch?v=*"] ,
-      "js": ["content.js"]
+      "matches": ["*://*.youtube.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"]
     }
   ],
   "action": {
@@ -22,5 +19,8 @@
       "resources": ["https://cdn.jsdelivr.net/npm/chart.js"],
       "matches": ["https://www.youtube.com/*"]
     }
-  ]
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
 }
