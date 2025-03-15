@@ -6,9 +6,20 @@ const { createClient } = require('@supabase/supabase-js');
 const app = express();
 app.use(express.json());
 
+const cors = require('cors');
+
+app.use(cors({
+    origin: '*', // Allows requests from any origin
+    methods: ['GET', 'POST'], 
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+
+
 
 // Fetch YouTube Comments
 async function fetchYouTubeComments(videoId) {
@@ -16,7 +27,7 @@ async function fetchYouTubeComments(videoId) {
     let nextPageToken = '';
 
     try {
-        while (comments.length < 1000) {
+        while (comments.length < 100) {
             const response = await axios.get('https://www.googleapis.com/youtube/v3/commentThreads', {
                 params: {
                     part: 'snippet',
@@ -38,7 +49,7 @@ async function fetchYouTubeComments(videoId) {
         console.error("Error fetching comments:", error.message);
     }
 
-    return comments.slice(0, 1000);
+    return comments.slice(0, 100); // Limit to 100 comments for now, can be adjusted later
 }
 
 // Analyze Sentiment with OpenAI
