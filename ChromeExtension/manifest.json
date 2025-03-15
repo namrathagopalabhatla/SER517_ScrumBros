@@ -16,8 +16,8 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["https://cdn.jsdelivr.net/npm/chart.js"],
-      "matches": ["https://www.youtube.com/*"]
+        "resources": ["libs/chart.js"],
+        "matches": ["https://www.youtube.com/*"]
     }
   ],
   "background": {
