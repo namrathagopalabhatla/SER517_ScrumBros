@@ -8,11 +8,36 @@ app.use(express.json());
 
 const cors = require('cors');
 
-app.use(cors({
-    origin: '*', // Allows requests from any origin
-    methods: ['GET', 'POST'], 
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// app.use(cors({
+//     origin: '*', // Allows requests from any origin
+//     methods: ['GET', 'POST', 'OPTIONS'], 
+//     allowedHeaders: ['Content-Type', 'Authorization']
+// }));
+
+// Ensure preflight requests are handled
+app.options('*', cors());
+const corsOptions = {
+    origin: '*', 
+    methods: 'GET, POST, OPTIONS',
+    allowedHeaders: 'Content-Type, Authorization',
+    credentials: true
+};
+
+app.use(cors(corsOptions));
+
+app.options('/analyze', (req, res) => {
+    res.set(corsOptions);
+    res.sendStatus(200);
+});
+
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "https://www.youtube.com");
+    res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.header("Access-Control-Allow-Credentials", "true");
+    next();
+});
+
 
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
