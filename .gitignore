@@ -2,3 +2,5 @@ Prototypes/scrumbros-youtube-sentiment-analysis/.env
 Prototypes/scrumbros-youtube-sentiment-analysis/firebase-credentials.json
 
 .DS_Store
+
+/youtube-sentiment-backend/.gitignore
