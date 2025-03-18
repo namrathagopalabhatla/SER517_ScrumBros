@@ -27,41 +27,53 @@ function getVideoId() {
   return urlParams.get("v");
 }
 
-async function addScrumBrosMessage() {
+async function addScrumBrosContainer() {
   const commentsSection = document.querySelector('#comments');
   
-  if (commentsSection && !document.querySelector('.scrum-bros-message')) {
-    const messageDiv = document.createElement('div');
-    messageDiv.className = 'scrum-bros-message';
-    messageDiv.style.padding = "10px";
-    messageDiv.style.border = "1px solid #ccc";
-    messageDiv.style.borderRadius = "8px";
-    messageDiv.style.backgroundColor = "#f9f9f9";
-    messageDiv.style.marginBottom = "10px";
-    messageDiv.style.fontSize = "14px";
-    messageDiv.style.fontFamily = "Arial, sans-serif";
-
-    messageDiv.textContent = "Fetching Scrum Bro's analysis...";
-    commentsSection.insertBefore(messageDiv, commentsSection.firstChild);
-
-    const videoId = getVideoId();
-    if (videoId) {
-      const analysis = await fetchScrumBrosAnalysis(videoId);
-      messageDiv.textContent = `Scrum Bro's Analysis: ${analysis}`;
-    } else {
-      messageDiv.textContent = "Could not determine video ID.";
-    }
+  if (commentsSection && !document.querySelector('.scrum-bros-container')) {
+    const containerDiv = document.createElement('div');
+    containerDiv.className = 'scrum-bros-container';
+    containerDiv.style.padding = "20px";
+    containerDiv.style.border = "1px solid #ccc";
+    containerDiv.style.borderRadius = "8px";
+    containerDiv.style.backgroundColor = "#f9f9f9";
+    containerDiv.style.marginBottom = "10px";
+    containerDiv.style.fontSize = "14px";
+    containerDiv.style.fontFamily = "Arial, sans-serif";
+    containerDiv.style.display = "flex";
+    containerDiv.style.flexDirection = "row";
+    containerDiv.style.justifyContent = "space-between";
+    
+    const leftDiv = document.createElement('div');
+    leftDiv.className = 'scrum-bros-left';
+    leftDiv.style.width = "48%";
+    leftDiv.style.border = "1px solid #ddd";
+    leftDiv.style.padding = "10px";
+    leftDiv.style.borderRadius = "8px";
+    leftDiv.style.backgroundColor = "#fff";
+    
+    const rightDiv = document.createElement('div');
+    rightDiv.className = 'scrum-bros-right';
+    rightDiv.style.width = "48%";
+    rightDiv.style.border = "1px solid #ddd";
+    rightDiv.style.padding = "10px";
+    rightDiv.style.borderRadius = "8px";
+    rightDiv.style.backgroundColor = "#fff";
+    
+    containerDiv.appendChild(leftDiv);
+    containerDiv.appendChild(rightDiv);
+    commentsSection.insertBefore(containerDiv, commentsSection.firstChild);
   }
 }
 
 const observer = new MutationObserver((mutations) => {
   for (const mutation of mutations) {
     if (mutation.addedNodes.length) {
-      addScrumBrosMessage();
+      addScrumBrosContainer();
     }
   }
 });
 
 observer.observe(document.body, { childList: true, subtree: true });
 
-addScrumBrosMessage();
+addScrumBrosContainer();
