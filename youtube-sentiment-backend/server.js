@@ -2,9 +2,21 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
+const cors = require('cors');
 
 const app = express();
 app.use(express.json());
+
+app.use(cors({
+    origin: ["https://www.youtube.com", "chrome-extension://*"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true
+}));
+
+// Handle Preflight Requests (Important for Chrome Extensions)
+app.options('*', cors());
+
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
