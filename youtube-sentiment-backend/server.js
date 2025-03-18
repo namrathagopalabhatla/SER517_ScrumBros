@@ -7,15 +7,37 @@ const cors = require('cors');
 const app = express();
 app.use(express.json());
 
-app.use(cors({
-    origin: ["https://www.youtube.com", "chrome-extension://*"],
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true
-}));
+// app.use(cors({
+//     origin: ["https://www.youtube.com", "chrome-extension://*"],
+//     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+//     allowedHeaders: ["Content-Type", "Authorization"],
+//     credentials: true
+// }));
 
 // Handle Preflight Requests (Important for Chrome Extensions)
 app.options('*', cors());
+
+const corsOptions = {
+    origin: '*', 
+    methods: 'GET, POST, OPTIONS',
+    allowedHeaders: 'Content-Type, Authorization',
+    credentials: true
+};
+
+app.use(cors(corsOptions));
+
+app.options('/analyze', (req, res) => {
+    res.set(corsOptions);
+    res.sendStatus(200);
+});
+
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "https://www.youtube.com");
+    res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.header("Access-Control-Allow-Credentials", "true");
+    next();
+});
 
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
@@ -28,7 +50,7 @@ async function fetchYouTubeComments(videoId) {
     let nextPageToken = '';
 
     try {
-        while (comments.length < 1000) {
+        while (comments.length < 100) { // reducing for quick response
             const response = await axios.get('https://www.googleapis.com/youtube/v3/commentThreads', {
                 params: {
                     part: 'snippet',
