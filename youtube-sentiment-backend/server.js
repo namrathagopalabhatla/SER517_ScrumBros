@@ -141,35 +141,56 @@ async function saveSentimentData(videoId, analysis) {
 
 // API Endpoint to Analyze a Video
 app.post('/analyze', async (req, res) => {
-    const { videoId } = req.body;
-    if (!videoId) return res.status(400).json({ error: "videoId is required" });
+    const { videoId, forceRetry } = req.body;
 
-    console.log(`Fetching comments for video: ${videoId}`);
-    const comments = await fetchYouTubeComments(videoId);
-    
-    console.log(`Analyzing ${comments.length} comments...`);
-    const analysis = await analyzeSentiment(comments);
+    if (!videoId) {
+        return res.status(400).json({ error: "videoId is required" });
+    }
 
-    if (!analysis) return res.status(500).json({ error: "Sentiment analysis failed" });
+    console.log(`Checking existing sentiment analysis for video: ${videoId}`);
 
-    await saveSentimentData(videoId, analysis);
-
-    res.json(analysis);
-});
-
-// API Endpoint to Retrieve Results
-app.get('/sentiment/:videoId', async (req, res) => {
-    const { videoId } = req.params;
-
-    const { data, error } = await supabase
+    const { data: existingData, error } = await supabase
         .from('youtube_sentiment')
         .select('*')
         .eq('videoid', videoId)
         .single();
 
-    if (error) return res.status(500).json({ error: "No results found." });
+    if (error && error.code !== 'PGRST116') {
+        // PGRST116 is the "row not found" error in Supabase
+        console.error("Error checking database:", error);
+        return res.status(500).json({ error: "Database error" });
+    }
 
-    res.json(data);
+    if (existingData && !forceRetry) {
+        console.log(`Returning cached sentiment analysis for video: ${videoId}`);
+        return res.json(existingData);
+    }
+
+    console.log(`Fetching comments for video: ${videoId}`);
+    const comments = await fetchYouTubeComments(videoId);
+
+    if (!comments || comments.length === 0) {
+        return res.status(500).json({ error: "No comments found for analysis" });
+    }
+
+    console.log(`Analyzing ${comments.length} comments...`);
+    const analysis = await analyzeSentiment(comments);
+
+    if (!analysis) {
+        return res.status(500).json({ error: "Sentiment analysis failed" });
+    }
+
+    const { data, insertError } = await supabase
+        .from('youtube_sentiment')
+        .upsert([{ videoid: videoId, analysis }], { onConflict: ['videoid'] });
+
+    if (insertError) {
+        console.error("Error saving data:", insertError);
+        return res.status(500).json({ error: "Failed to save sentiment analysis" });
+    }
+
+    console.log(`New sentiment analysis saved for video: ${videoId}`);
+    res.json(analysis);
 });
 
 // Start Server
