@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
+const bcrypt = require('bcrypt');
 
 const app = express();
 app.use(express.json());
@@ -10,10 +11,6 @@ const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
-const bcrypt = require('bcrypt');
-
-
-
 // Function to validate password strength
 function isStrongPassword(password) {
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
@@ -21,7 +18,6 @@ function isStrongPassword(password) {
 }
 
 // Register API with password validation
-
 app.post('/register', async (req, res) => {
     const { email, password } = req.body;
 
@@ -36,8 +32,7 @@ app.post('/register', async (req, res) => {
     }
 
     try {
-        // 🔍 Check if email already exists
-        const { data: existingUser, error: fetchError } = await supabase
+        const { data: existingUser } = await supabase
             .from('users')
             .select('id')
             .eq('email', email)
@@ -47,7 +42,6 @@ app.post('/register', async (req, res) => {
             return res.status(409).json({ error: "Email already registered" });
         }
 
-        // Hash password and insert new user
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const { data, error } = await supabase
@@ -67,7 +61,6 @@ app.post('/register', async (req, res) => {
     }
 });
 
-
 // Login API
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
@@ -77,7 +70,6 @@ app.post('/login', async (req, res) => {
     }
 
     try {
-        // Retrieve user from Supabase
         const { data, error } = await supabase
             .from('users')
             .select('*')
@@ -88,7 +80,6 @@ app.post('/login', async (req, res) => {
             return res.status(401).json({ error: "Invalid email or password" });
         }
 
-        // Compare password with the hashed password
         const isMatch = await bcrypt.compare(password, data.password);
         if (!isMatch) {
             return res.status(401).json({ error: "Invalid email or password" });
@@ -134,24 +125,11 @@ async function fetchYouTubeComments(videoId) {
 
 // Analyze Sentiment with OpenAI
 async function analyzeSentiment(comments) {
-    if (!process.env.OPENAI_API_KEY) {
+    if (!OPENAI_API_KEY) {
         throw new Error("OPENAI_API_KEY is missing! Please check your .env file.");
     }
 
-    const prompt = `Classify the following YouTube comments into five categories: positive, negative, neutral, irrelevant, and scam. Also, provide a brief summary of the overall sentiment:
-
-    Comments:
-    ${comments.slice(0, 20).join("\n")}
-
-    Respond in JSON format like:
-    {
-      "positive": [ ... ],
-      "negative": [ ... ],
-      "neutral": [ ... ],
-      "irrelevant": [ ... ],
-      "scam": [ ... ],
-      "summary": "..."
-    }`;
+    const prompt = `Classify the following YouTube comments into five categories: positive, negative, neutral, irrelevant, and scam. Also, provide a brief summary of the overall sentiment:\n\nComments:\n${comments.slice(0, 20).join("\n")}\n\nRespond in JSON format like:\n{\n  "positive": [ ... ],\n  "negative": [ ... ],\n  "neutral": [ ... ],\n  "irrelevant": [ ... ],\n  "scam": [ ... ],\n  "summary": "..."\n}`;
 
     try {
         const response = await axios.post(
@@ -163,112 +141,19 @@ async function analyzeSentiment(comments) {
             },
             {
                 headers: {
-                    "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,  // Use env variable
+                    "Authorization": `Bearer ${OPENAI_API_KEY}`,
                     "Content-Type": "application/json"
                 }
             }
         );
 
-        // Ensure response is valid before parsing
-        if (!response.data || !response.data.choices || !response.data.choices[0].message) {
-            console.error("Invalid response from OpenAI:", response.data);
-            return null;
-        }
-
         let content = response.data.choices[0].message.content;
-        content = content.replace(/```json|```/g, '').trim(); // Remove extra backticks and format properly
-
         return JSON.parse(content);
     } catch (error) {
-        if (error.response) {
-            console.error("OpenAI API Error:", error.response.status, error.response.data);
-        } else {
-            console.error("Request failed:", error.message);
-        }
+        console.error("OpenAI API Error:", error);
         return null;
     }
 }
-
-// Save Sentiment Data to Supabase
-async function saveSentimentData(videoId, analysis) {
-    const totalComments = Object.values(analysis).flat().length;
-
-    const percentages = {
-        positive: (analysis.positive.length / totalComments) * 100,
-        negative: (analysis.negative.length / totalComments) * 100,
-        neutral: (analysis.neutral.length / totalComments) * 100,
-        irrelevant: (analysis.irrelevant.length / totalComments) * 100,
-        scam: (analysis.scam.length / totalComments) * 100,
-    };
-
-    const { data, error } = await supabase
-        .from('youtube_sentiment')
-        .upsert([
-            {
-                videoid: videoId,
-                positive_percentage: percentages.positive,
-                negative_percentage: percentages.negative,
-                neutral_percentage: percentages.neutral,
-                irrelevant_percentage: percentages.irrelevant,
-                scam_percentage: percentages.scam,
-                summary: analysis.summary
-            }
-        ]);
-
-    if (error) console.error("Error saving to Supabase:", error.message);
-}
-// api to test if supabase connection was successful
-app.get('/test-supabase', async (req, res) => {
-    try {
-        const { data, error } = await supabase
-            .from('youtube_sentiment') // Replace with your actual table
-            .select('*')
-            .limit(1);
-
-        if (error) {
-            console.error("Supabase connection error:", error.message);
-            return res.status(500).json({ error: "Supabase connection failed." });
-        }
-
-        res.json({ message: "Supabase connected successfully!", sampleData: data });
-    } catch (err) {
-        console.error("Error testing Supabase connection:", err.message);
-        res.status(500).json({ error: "Internal server error." });
-    }
-});
-
-// API Endpoint to Analyze a Video
-app.post('/analyze', async (req, res) => {
-    const { videoId } = req.body;
-    if (!videoId) return res.status(400).json({ error: "videoId is required" });
-
-    console.log(`Fetching comments for video: ${videoId}`);
-    const comments = await fetchYouTubeComments(videoId);
-    
-    console.log(`Analyzing ${comments.length} comments...`);
-    const analysis = await analyzeSentiment(comments);
-
-    if (!analysis) return res.status(500).json({ error: "Sentiment analysis failed" });
-
-    await saveSentimentData(videoId, analysis);
-
-    res.json(analysis);
-});
-
-// API Endpoint to Retrieve Results
-app.get('/sentiment/:videoId', async (req, res) => {
-    const { videoId } = req.params;
-
-    const { data, error } = await supabase
-        .from('youtube_sentiment')
-        .select('*')
-        .eq('videoid', videoId)
-        .single();
-
-    if (error) return res.status(500).json({ error: "No results found." });
-
-    res.json(data);
-});
 
 // Start Server
 const PORT = process.env.PORT || 3000;
