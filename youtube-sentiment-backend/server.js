@@ -12,7 +12,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANO
 
 const bcrypt = require('bcrypt');
 
-const bcrypt = require('bcrypt');
+
 
 // Function to validate password strength
 function isStrongPassword(password) {
@@ -21,6 +21,7 @@ function isStrongPassword(password) {
 }
 
 // Register API with password validation
+
 app.post('/register', async (req, res) => {
     const { email, password } = req.body;
 
@@ -28,16 +29,27 @@ app.post('/register', async (req, res) => {
         return res.status(400).json({ error: "Email and password are required" });
     }
 
-    // Check if password meets strength criteria
     if (!isStrongPassword(password)) {
-        return res.status(400).json({ error: "Password must be at least 8 characters long and include at least one uppercase letter, one lowercase letter, one number, and one special character." });
+        return res.status(400).json({
+            error: "Password must be at least 8 characters long and include at least one uppercase letter, one lowercase letter, one number, and one special character."
+        });
     }
 
     try {
-        // Hash the password before storing
+        // 🔍 Check if email already exists
+        const { data: existingUser, error: fetchError } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', email)
+            .single();
+
+        if (existingUser) {
+            return res.status(409).json({ error: "Email already registered" });
+        }
+
+        // Hash password and insert new user
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Insert user into Supabase
         const { data, error } = await supabase
             .from('users')
             .insert([{ email, password: hashedPassword }])
