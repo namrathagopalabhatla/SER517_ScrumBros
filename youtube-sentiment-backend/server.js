@@ -42,6 +42,8 @@ app.use((req, res, next) => {
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
 
@@ -83,20 +85,21 @@ async function analyzeSentiment(comments) {
         throw new Error("OPENAI_API_KEY is missing! Please check your .env file.");
     }
 
-    const prompt = `Classify the following YouTube comments into five categories: positive, negative, neutral, irrelevant, and scam. Also, provide a brief summary of the overall sentiment:
+  
+
+    const prompt = `Classify the following YouTube comments into three categories: positive, negative, and neutral. Also, provide a brief summary of the overall sentiment of the comments.
 
     Comments:
     ${comments.slice(0, 20).join("\n")}
 
-    Respond in JSON format like:
+    Respond ONLY in JSON format like:
     {
-      "positive": [ ... ],
-      "negative": [ ... ],
-      "neutral": [ ... ],
-      "irrelevant": [ ... ],
-      "scam": [ ... ],
-      "summary": "..."
+    "positive": ["comment 1", "comment 2"],
+    "negative": ["comment 3"],
+    "neutral": ["comment 4", "comment 5"],
+    "summary": "This is the summary..."
     }`;
+
 
     try {
         const response = await axios.post(
@@ -121,7 +124,7 @@ async function analyzeSentiment(comments) {
         }
 
         let content = response.data.choices[0].message.content;
-        content = content.replace(/```json|```/g, '').trim(); // Remove extra backticks and format properly
+        content = content.replace(/json|/g, '').trim(); // Remove extra backticks and format properly
 
         return JSON.parse(content);
     } catch (error) {
@@ -168,18 +171,65 @@ app.post('/analyze', async (req, res) => {
     const { videoId } = req.body;
     if (!videoId) return res.status(400).json({ error: "videoId is required" });
 
-    console.log(`Fetching comments for video: ${videoId}`);
+    console.log( `Fetching comments for video: ${videoId}`);
     const comments = await fetchYouTubeComments(videoId);
-    
+    const realTotal = 3600; // You can dynamically replace this if needed
+
     console.log(`Analyzing ${comments.length} comments...`);
     const analysis = await analyzeSentiment(comments);
-
     if (!analysis) return res.status(500).json({ error: "Sentiment analysis failed" });
 
-    await saveSentimentData(videoId, analysis);
+    // Count totals
+    const totalAnalyzed = comments.length;
+    const pos = analysis.positive?.length || 0;
+    const neg = analysis.negative?.length || 0;
+    const neutral = analysis.neutral?.length || 0;
 
-    res.json(analysis);
+    // Compute verdict score
+    let verdict = 0;
+    const posRatio = pos / totalAnalyzed;
+    const negRatio = neg / totalAnalyzed;
+    if (posRatio >= 0.6) verdict = 2;
+    else if (posRatio >= 0.4) verdict = 1;
+    else if (negRatio >= 0.6) verdict = -2;
+    else if (negRatio >= 0.4) verdict = -1;
+
+    // Pick helpful comments
+    const helpfulComments = [
+        ...analysis.positive.slice(0, 2),
+        ...analysis.neutral.slice(0, 2),
+        analysis.negative[0]
+    ].filter(Boolean).slice(0, 5); // Max 5
+
+    // Save to Supabase
+    const { error } = await supabase
+        .from('video_sentiment_summary')
+        .upsert([
+            {
+                videoid: videoId,
+                summary: analysis.summary,
+                most_helpful_comments: helpfulComments,
+                verdict: verdict,
+                real_total_comments: realTotal,
+                comments_data: [totalAnalyzed, pos, neutral, neg]
+            }
+        ]);
+
+    if (error) {
+        console.error("❌ Error saving to Supabase:", error.message);
+        return res.status(500).json({ error: "Failed to save analysis result." });
+    }
+
+    // Send formatted response
+    res.json({
+        summary: analysis.summary,
+        most_helpful_comments: helpfulComments,
+        verdict: verdict,
+        real_total_comments: realTotal,
+        comments_data: [totalAnalyzed, pos, neutral, neg]
+    });
 });
+
 
 // API Endpoint to Retrieve Results
 app.get('/sentiment/:videoId', async (req, res) => {
@@ -198,4 +248,23 @@ app.get('/sentiment/:videoId', async (req, res) => {
 
 // Start Server
 const PORT = process.env.PORT || 3000;
+app.get('/test-supabase', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('video_sentiment_summary') // or 'video_sentiment_summary' if you're testing new table
+            .select('*')
+            .limit(1);
+
+        if (error) {
+            console.error("❌ Supabase error:", error.message);
+            return res.status(500).json({ connected: false, error: error.message });
+        }
+
+        res.json({ connected: true, sample: data });
+    } catch (err) {
+        console.error("❌ Unexpected error:", err.message);
+        res.status(500).json({ connected: false, error: err.message });
+    }
+});
+
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
