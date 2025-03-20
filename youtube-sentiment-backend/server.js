@@ -2,18 +2,27 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
+const cors = require('cors');
 
 const app = express();
 app.use(express.json());
 
-const cors = require('cors');
+// app.use(cors({
+//     origin: ["https://www.youtube.com", "chrome-extension://*"],
+//     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+//     allowedHeaders: ["Content-Type", "Authorization"],
+//     credentials: true
+// }));
 
-    app.options('*', cors());
-    const corsOptions = {
-        origin: '*', 
-        methods: 'GET, POST, OPTIONS',
-        allowedHeaders: 'Content-Type, Authorization'
-    };
+// Handle Preflight Requests (Important for Chrome Extensions)
+app.options('*', cors());
+
+const corsOptions = {
+    origin: '*', 
+    methods: 'GET, POST, OPTIONS',
+    allowedHeaders: 'Content-Type, Authorization',
+    credentials: true
+};
 
 app.use(cors(corsOptions));
 
@@ -31,42 +40,29 @@ app.use((req, res, next) => {
 });
 
 
-
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-
-
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
 // Fetch YouTube Comments
 async function fetchYouTubeComments(videoId) {
     let comments = [];
     let nextPageToken = '';
-    const maxToCollect = 150; 
 
     try {
-        while (comments.length < maxToCollect) {
-            const response = await axios.get(
-                'https://www.googleapis.com/youtube/v3/commentThreads',
-                {
-                    params: {
-                        part: 'snippet',
-                        videoId,
-                        key: YOUTUBE_API_KEY,
-                        maxResults: 100,
-                        pageToken: nextPageToken,
-                        textFormat: 'plainText'
-                    }
+        while (comments.length < 100) { // reducing for quick response
+            const response = await axios.get('https://www.googleapis.com/youtube/v3/commentThreads', {
+                params: {
+                    part: 'snippet',
+                    videoId,
+                    key: YOUTUBE_API_KEY,
+                    maxResults: 100,
+                    pageToken: nextPageToken
                 }
-            );
+            });
 
-            const items = response.data.items || [];
-
-            items.forEach(item => {
-                const comment = item.snippet.topLevelComment.snippet.textDisplay;
-                if (comment && comment.trim().length > 5) {
-                    comments.push(comment.trim());
-                }
+            response.data.items.forEach(item => {
+                comments.push(item.snippet.topLevelComment.snippet.textOriginal);
             });
 
             nextPageToken = response.data.nextPageToken;
@@ -76,64 +72,56 @@ async function fetchYouTubeComments(videoId) {
         console.error("Error fetching comments:", error.message);
     }
 
-    console.log(`Collected ${comments.length} top-level comments.`);
-    return comments.slice(0, 100); // Limit to exactly 100 for analysis
+    return comments.slice(0, 1000);
 }
-
 
 // Analyze Sentiment with OpenAI
 async function analyzeSentiment(comments) {
     if (!process.env.OPENAI_API_KEY) {
-        throw new Error("OPENAI_API_KEY is missing! Please check .env file.");
+        throw new Error("OPENAI_API_KEY is missing! Please check your .env file.");
     }
 
-    // Trim comments to 200 characters each to keep prompt concise
-    const trimmedComments = comments
-        .filter(c => typeof c === 'string' && c.trim().length > 5)
-        .slice(0, 100)
-        .map(c => c.trim().slice(0, 200));
+    const prompt = `Classify the following YouTube comments into five categories: positive, negative, neutral, irrelevant, and scam. Also, provide a brief summary of the overall sentiment:
 
-    const prompt = `You are a sentiment analysis assistant. Classify each of the following YouTube comments into one of the following categories: "positive", "negative", or "neutral". Do not skip any comment. Return a summary at the end. 
-    
-Respond strictly in this JSON format:
-{
-  "positive": [ ... ],
-  "negative": [ ... ],
-  "neutral": [ ... ],
-  "summary": "..."
-}
+    Comments:
+    ${comments.slice(0, 20).join("\n")}
 
-Comments:
-${trimmedComments.map((c, i) => `${i + 1}. ${c}`).join('\n')}
-`;
+    Respond in JSON format like:
+    {
+      "positive": [ ... ],
+      "negative": [ ... ],
+      "neutral": [ ... ],
+      "irrelevant": [ ... ],
+      "scam": [ ... ],
+      "summary": "..."
+    }`;
 
     try {
         const response = await axios.post(
             "https://api.openai.com/v1/chat/completions",
             {
-                model: "gpt-3.5-turbo-0125", 
+                model: "gpt-4o-mini",
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.4,
-                max_tokens: 700 
+                temperature: 0.5
             },
             {
                 headers: {
-                    "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+                    "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,  // Use env variable
                     "Content-Type": "application/json"
                 }
             }
         );
 
-        // Parse content
-        const content = response.data.choices?.[0]?.message?.content;
-        if (!content) {
-            console.error("No content returned from OpenAI.");
+        // Ensure response is valid before parsing
+        if (!response.data || !response.data.choices || !response.data.choices[0].message) {
+            console.error("Invalid response from OpenAI:", response.data);
             return null;
         }
 
-        const cleaned = content.replace(/```json|```/g, '').trim();
-        return JSON.parse(cleaned);
+        let content = response.data.choices[0].message.content;
+        content = content.replace(/```json|```/g, '').trim(); // Remove extra backticks and format properly
 
+        return JSON.parse(content);
     } catch (error) {
         if (error.response) {
             console.error("OpenAI API Error:", error.response.status, error.response.data);
@@ -175,94 +163,56 @@ async function saveSentimentData(videoId, analysis) {
 
 // API Endpoint to Analyze a Video
 app.post('/analyze', async (req, res) => {
-    const { videoId } = req.body;
-    if (!videoId) return res.status(400).json({ error: "videoId is required" });
+    const { videoId, forceRetry } = req.body;
 
-    // Check if this video was already analyzed
-    const { data: existingData, error: fetchError } = await supabase
-        .from('video_sentiment_summary')
-        .select('*')
-        .eq('videoid', videoId)
-        .single();
-
-    if (existingData) {
-        console.log(`📦 Returning cached result for video: ${videoId}`);
-        return res.json(existingData);
+    if (!videoId) {
+        return res.status(400).json({ error: "videoId is required" });
     }
 
-    console.log(`Fetching comments for video: ${videoId}`);
-    const comments = await fetchYouTubeComments(videoId);
-    const realTotal = 3600; // You can make this dynamic later if needed
+    console.log(`Checking existing sentiment analysis for video: ${videoId}`);
 
-    console.log(`Analyzing ${comments.length} comments...`);
-    const analysis = await analyzeSentiment(comments);
-    if (!analysis) return res.status(500).json({ error: "Sentiment analysis failed" });
-
-    // couting the totals
-    const pos = analysis.positive?.length || 0;
-    const neg = analysis.negative?.length || 0;
-    const neutral = analysis.neutral?.length || 0;
-    const totalAnalyzed = pos + neg + neutral;
-
-
-    // Compute verdict score
-    let verdict = 0;
-    const posRatio = pos / totalAnalyzed;
-    const negRatio = neg / totalAnalyzed;
-    if (posRatio >= 0.6) verdict = 2;
-    else if (posRatio >= 0.4) verdict = 1;
-    else if (negRatio >= 0.6) verdict = -2;
-    else if (negRatio >= 0.4) verdict = -1;
-
-    // Select helpful comments
-    const helpfulComments = [
-        ...analysis.positive.slice(0, 2),
-        ...analysis.neutral.slice(0, 2),
-        analysis.negative[0]
-    ].filter(Boolean).slice(0, 5);
-
-    // Save to Supabase
-    const { error } = await supabase
-        .from('video_sentiment_summary')
-        .upsert([
-            {
-                videoid: videoId,
-                summary: analysis.summary,
-                most_helpful_comments: helpfulComments,
-                verdict: verdict,
-                real_total_comments: realTotal,
-                comments_data: [totalAnalyzed, pos, neutral, neg]
-            }
-        ], { onConflict: 'videoid' }); // 🔐 ensure no duplicate error
-
-    if (error) {
-        console.error("Error saving to Supabase:", error.message);
-        return res.status(500).json({ error: "Failed to save analysis result." });
-    }
-
-    res.json({
-        summary: analysis.summary,
-        most_helpful_comments: helpfulComments,
-        verdict: verdict,
-        real_total_comments: realTotal,
-        comments_data: [totalAnalyzed, pos, neutral, neg]
-    });
-});
-
-
-// API Endpoint to Retrieve Results
-app.get('/sentiment/:videoId', async (req, res) => {
-    const { videoId } = req.params;
-
-    const { data, error } = await supabase
+    const { data: existingData, error } = await supabase
         .from('youtube_sentiment')
         .select('*')
         .eq('videoid', videoId)
         .single();
 
-    if (error) return res.status(500).json({ error: "No results found." });
+    if (error && error.code !== 'PGRST116') {
+        // PGRST116 is the "row not found" error in Supabase
+        console.error("Error checking database:", error);
+        return res.status(500).json({ error: "Database error" });
+    }
 
-    res.json(data);
+    if (existingData && !forceRetry) {
+        console.log(`Returning cached sentiment analysis for video: ${videoId}`);
+        return res.json(existingData);
+    }
+
+    console.log(`Fetching comments for video: ${videoId}`);
+    const comments = await fetchYouTubeComments(videoId);
+
+    if (!comments || comments.length === 0) {
+        return res.status(500).json({ error: "No comments found for analysis" });
+    }
+
+    console.log(`Analyzing ${comments.length} comments...`);
+    const analysis = await analyzeSentiment(comments);
+
+    if (!analysis) {
+        return res.status(500).json({ error: "Sentiment analysis failed" });
+    }
+
+    const { data, insertError } = await supabase
+        .from('youtube_sentiment')
+        .upsert([{ videoid: videoId, analysis }], { onConflict: ['videoid'] });
+
+    if (insertError) {
+        console.error("Error saving data:", insertError);
+        return res.status(500).json({ error: "Failed to save sentiment analysis" });
+    }
+
+    console.log(`New sentiment analysis saved for video: ${videoId}`);
+    res.json(analysis);
 });
 
 // Start Server
