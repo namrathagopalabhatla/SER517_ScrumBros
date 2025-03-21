@@ -15,7 +15,7 @@ function loadChartJS(callback) {
   document.head.appendChild(script);
 }
 
-let comments_data = [100, 100, 0, 0]; // defalt data
+let comments_data = [100, 100, 0, 0]; // default data
 
 async function fetchCommentAnalysis(videoId) {
   
@@ -36,10 +36,10 @@ async function fetchCommentAnalysis(videoId) {
     console.log("Analysis data:", data);
 
     comments_data = data.comments_data.slice(1) || comments_data;
-    return data.summary || "No analysis available";
+    return {summary: data.summary || "No analysis available", verdict: data.verdict || "No verdict available", totalComments: data.real_total_comments || "No comments available", mostHelpfulComments: data.most_helpful_comments || []};
   } catch (error) {
     console.error("Error fetching analysis:", error);
-    return "Error fetching analysis";
+    return {summary: "Error fetching analysis", verdict: "Error fetching verdict", totalComments: "Error fetching comments", mostHelpfulComments: []};
   }
 }
 
@@ -49,6 +49,9 @@ function getVideoId() {
 }
 
 async function addAnalyzerContainer() {
+  
+  const textData = ["ScrumBros Sentiment Scoop", "Your Comments, Our Insights!"];
+
   if (document.querySelector('.yt-comment-analyzer-container')) {
     return;
   }
@@ -59,6 +62,26 @@ async function addAnalyzerContainer() {
     return;
   }
 
+  const headerDiv = document.createElement('div');
+  headerDiv.className = 'yt-comment-analyzer-header';
+
+  const headerText = document.createElement('span');
+  headerText.textContent = textData[0];
+  headerText.className = 'yt-comment-analyzer-headerText';
+
+  const icon = document.createElement('img');
+  icon.src = chrome.runtime.getURL("images/smeter.png");
+  icon.style.width = "24px";
+  icon.style.height = "24px";
+
+  const extraText = document.createElement('span');
+  extraText.textContent = textData[1];
+  extraText.className = 'yt-comment-analyzer-extraText';
+
+  headerDiv.appendChild(headerText);
+  headerDiv.appendChild(icon);
+  headerDiv.appendChild(extraText);
+
   const containerDiv = document.createElement('div');
   containerDiv.className = 'yt-comment-analyzer-container';
 
@@ -68,23 +91,112 @@ async function addAnalyzerContainer() {
   const rightDiv = document.createElement('div');
   rightDiv.className = 'yt-comment-analyzer-chart';
 
+  const overviewText = document.createElement('span');
+  overviewText.textContent = "Overview";
+  overviewText.className = 'yt-comment-analyzer-overview';
+
+  const verdictDiv = document.createElement('div');
+  verdictDiv.className = 'yt-comment-analyzer-verdict';
+
+  const verdictIcon = document.createElement('img');
+  verdictIcon.style.marginRight = "10px";
+  
+  const verdictText = document.createElement('span');
+  verdictText.className = 'yt-comment-analyzer-verdict-text';
+
+  const total_Comments = document.createElement('span');
+  total_Comments.style.fontSize = "10px";
+  total_Comments.style.color = "#aaaaaa";
+  
+  verdictDiv.appendChild(verdictIcon);
+  verdictDiv.appendChild(verdictText);
+  verdictDiv.appendChild(total_Comments);
+
+  const horizontalLine = document.createElement('hr');
+  horizontalLine.style.border = "none";
+  horizontalLine.style.borderTop = "0.6px solid #aaaaaa";
+  horizontalLine.style.margin = "6px 0";
+
+  const summaryDiv = document.createElement('div');
+  summaryDiv.className = 'yt-comment-analyzer-summary-text';
+
+  const helpfulReviewsText = document.createElement('div');
+  helpfulReviewsText.textContent = "MOST HELPFUL REVIEWS";
+  helpfulReviewsText.className = 'yt-comment-analyzer-most-helpful-reviews';
+
+  const helpfulCommentsDiv = document.createElement('div');
+  helpfulCommentsDiv.className = 'yt-comment-analyzer-helpful-comments-container';
+  
+  leftDiv.appendChild(overviewText);
+  leftDiv.appendChild(verdictDiv);
+  leftDiv.appendChild(horizontalLine);
+  leftDiv.appendChild(summaryDiv);
+  leftDiv.appendChild(helpfulReviewsText);
+  leftDiv.appendChild(helpfulCommentsDiv);
+
   const chartCanvas = document.createElement("canvas");
   chartCanvas.id = "commentChart";
   rightDiv.appendChild(chartCanvas);
 
   containerDiv.appendChild(leftDiv);
   containerDiv.appendChild(rightDiv);
-  commentsSection.insertBefore(containerDiv, commentsSection.firstChild);
+  commentsSection.insertBefore(headerDiv, commentsSection.firstChild);
+  commentsSection.insertBefore(containerDiv, commentsSection.firstChild.nextSibling);
 
   const videoId = getVideoId();
   if (videoId) {
     loadChartJS(async function() {
       const analysis = await fetchCommentAnalysis(videoId);
-      leftDiv.textContent = `Comment Analysis: ${analysis}`;
+      summaryDiv.textContent = `${analysis.summary}`;
+      total_Comments.textContent = `(${analysis.totalComments} Comments)`;
+      let verdictData = `${analysis.verdict}`;
+      console.log("Stored verdict:", verdictData);
+
+      let vText = "";
+      let vIcon = "";
+
+      switch (verdictData) {
+        case -2:
+          vText = "Mostly Negative";
+          vIcon = chrome.runtime.getURL("images/MostlyNegative.png");
+          break;
+        case -1:
+          vText = "Negative";
+          vIcon = chrome.runtime.getURL("images/Negative.png");
+          break;
+        case 0:
+          vText = "Neutral";
+          vIcon = chrome.runtime.getURL("images/Neutral.png");
+          break;
+        case 1:
+          vText = "Positive";
+          vIcon = chrome.runtime.getURL("images/Positive.png");
+          break;
+        case 2:
+          vText = "Mostly Positive";
+          vIcon = chrome.runtime.getURL("images/MostlyPositive.png");
+          break;
+        default:
+          vText = "Unknown";
+          vIcon = chrome.runtime.getURL("images/Unknown.png");
+          break;
+      }
+
+      verdictIcon.src = vIcon;
+      verdictText.textContent = vText;
+
+      analysis.mostHelpfulComments.forEach(comment => {
+      const commentElement = document.createElement('div');
+      commentElement.textContent = comment;
+      commentElement.className = 'yt-comment-analyzer-helpful-comments';
+      
+      helpfulCommentsDiv.appendChild(commentElement);
+      });
+
       renderChart();
     });
   } else {
-    leftDiv.textContent = "Could not determine video ID.";
+    summaryDiv.textContent = "Could not determine video ID.";
   }
 }
 
@@ -122,7 +234,29 @@ function renderChart() {
       responsive: true,
       maintainAspectRatio: true,
       plugins: {
-        legend: { position: "bottom" }
+        legend: {
+          position: "bottom",
+          align: "center",
+          labels: {
+            color: "#ffffff",
+            font: {
+              size: 14
+            },
+            boxWidth: 30
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(tooltipItem) {
+              let value = tooltipItem.raw;
+              return `${value}%`;
+            }
+          }
+        }
+      },
+      animation: {
+        animateScale: true,
+        animateRotate: true
       }
     }
   });

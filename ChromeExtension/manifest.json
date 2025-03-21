@@ -16,7 +16,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["libs/chart.js"],
+      "resources": ["libs/chart.js", "images/smeter.png", "images/MostlyPositive.png", "images/Positive.png", "images/Neutral.png", "images/Negative.png", "images/MostlyNegative.png", "images/Unknown.png"],
       "matches": ["*://*.youtube.com/*"]
     }
   ],

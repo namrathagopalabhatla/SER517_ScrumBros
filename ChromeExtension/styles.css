@@ -1,46 +1,121 @@
-.yt-comment-analyzer-container {
-  padding: 20px;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  background-color: #f9f9f9;
-  margin-bottom: 10px;
+.yt-comment-analyzer-header {
+  display: flex;
+  align-Items: center;
+  margin-Bottom: 8px;
+  color: #f1f1f1;
+  font-family: Arial, sans-serif;
+  gap: 10px;
+}
+
+.yt-comment-analyzer-headerText {
+  font-size: 20px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.yt-comment-analyzer-extraText {
   font-size: 14px;
+  font-style: italic;
+  white-space: nowrap;
+}
+
+.yt-comment-analyzer-container {
+  padding: 10px;
+  border-radius: 12px;
+  background-color: rgba(255, 255, 255, 0.1);
+  min-width: max(381px, 50% - 12px);
+  min-height: 200px;
+  height: auto;
+  margin-top: 12px;
   font-family: Arial, sans-serif;
   display: flex;
   flex-direction: row;
   justify-content: space-between;
+  gap: 10px;
+  flex-grow: 1;
+}
+
+.yt-comment-analyzer-overview {
+  font-size: 10px;
+  color: #aaaaaa;
+  margin-top: 10px;
+  margin-left: 44px;
+}
+
+.yt-comment-analyzer-verdict {
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+  margin-left: 10px;
+}
+
+.yt-comment-analyzer-verdict-text {
+  font-size: 18px;
+  color: #f1f1f1;
+  white-space: nowrap;
+  margin-right: 10px;
 }
 
 .yt-comment-analyzer-summary {
-  width: 75%;
-  border: 1px solid #ddd;
+  width: 65%;
   padding: 10px;
+  border-radius: 12px;
+  background-color: rgba(0, 0, 0, 0.4);
+  color: #aaaaaa;
+}
+
+.yt-comment-analyzer-summary-text {
+  font-size: 14px;
+  color: #f1f1f1;
+  margin-top: 10px;
+}
+
+.yt-comment-analyzer-most-helpful-reviews {
+  font-size: 13px;
+  color: #aaaaaa;
+  margin-top: 10px;
+  text-transform: uppercase;
+}
+
+.yt-comment-analyzer-helpful-comments-container {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.yt-comment-analyzer-helpful-comments {
+  font-size: 12px;
+  color: #f1f1f1;
+  background-color: rgba(0, 0, 0, 0.2);
+  padding: 6px;
   border-radius: 8px;
-  background-color: #fff;
+  max-width: 100%;
+  overflow-wrap: break-word;
 }
 
 .yt-comment-analyzer-chart {
-  width: 20%;
-  border: 1px solid #ddd;
+  width: 35%;
   padding: 10px;
-  border-radius: 8px;
-  background-color: #fff;
-  text-align: center;
-}
-
-.yt-comment-analyzer-message {
-  background-color: #f9f9f9;
-  padding: 12px;
-  margin: 10px 0;
-  border-radius: 8px;
-  text-align: center;
-  font-size: 16px;
-  font-weight: bold;
-  color: #065fd4;
-  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  background-color: rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
 }
 
 #commentChart {
   max-width: 100%;
   max-height: 200px;
+}
+
+.yt-comment-analyzer-chart .chartjs-legend ul {
+  display: flex;
+  justify-content: center;
+  flex-wrap: nowrap;
+}
+
+.yt-comment-analyzer-chart .chartjs-legend li {
+  margin: 0 10px;
 }
