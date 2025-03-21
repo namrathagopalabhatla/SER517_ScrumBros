@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
+const { jsonrepair } = require("jsonrepair");
 
 const app = express();
 app.use(express.json());
@@ -29,8 +30,6 @@ app.use((req, res, next) => {
     res.header("Access-Control-Allow-Credentials", "true");
     next();
 });
-
-
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -111,10 +110,10 @@ ${trimmedComments.map((c, i) => `${i + 1}. ${c}`).join('\n')}
         const response = await axios.post(
             "https://api.openai.com/v1/chat/completions",
             {
-                model: "gpt-3.5-turbo-0125", 
+                model: "gpt-4o-mini", 
                 messages: [{ role: "user", content: prompt }],
                 temperature: 0.4,
-                max_tokens: 700 
+                max_tokens: 1000
             },
             {
                 headers: {
@@ -131,8 +130,16 @@ ${trimmedComments.map((c, i) => `${i + 1}. ${c}`).join('\n')}
             return null;
         }
 
-        const cleaned = content.replace(/```json|```/g, '').trim();
-        return JSON.parse(cleaned);
+        // const cleaned = content.replace(/```json|```/g, '').trim();
+        // return JSON.parse(cleaned);
+        let cleanedJson;
+        try {
+            cleanedJson = jsonrepair(content);
+            return JSON.parse(cleanedJson);
+        } catch (repairError) {
+            console.error("JSON Repair Failed:", repairError.message);
+            return null;
+        }
 
     } catch (error) {
         if (error.response) {
@@ -175,37 +182,36 @@ async function saveSentimentData(videoId, analysis) {
 
 // API Endpoint to Analyze a Video
 app.post('/analyze', async (req, res) => {
-    const { videoId } = req.body;
+    const { videoId, autoRetry = false } = req.body;
+
     if (!videoId) return res.status(400).json({ error: "videoId is required" });
 
-    // Check if this video was already analyzed
+    // Step 1: Try to fetch existing sentiment analysis
     const { data: existingData, error: fetchError } = await supabase
         .from('video_sentiment_summary')
         .select('*')
         .eq('videoid', videoId)
         .single();
 
-    if (existingData) {
-        console.log(`📦 Returning cached result for video: ${videoId}`);
+    if (existingData && !autoRetry) {
+        console.log(`Returning cached result for video: ${videoId}`);
         return res.json(existingData);
     }
 
+    // Step 2: Otherwise, analyze the comments
     console.log(`Fetching comments for video: ${videoId}`);
     const comments = await fetchYouTubeComments(videoId);
-    const realTotal = 3600; // You can make this dynamic later if needed
 
     console.log(`Analyzing ${comments.length} comments...`);
     const analysis = await analyzeSentiment(comments);
     if (!analysis) return res.status(500).json({ error: "Sentiment analysis failed" });
 
-    // couting the totals
     const pos = analysis.positive?.length || 0;
     const neg = analysis.negative?.length || 0;
     const neutral = analysis.neutral?.length || 0;
     const totalAnalyzed = pos + neg + neutral;
 
-
-    // Compute verdict score
+    // Step 3: Compute verdict
     let verdict = 0;
     const posRatio = pos / totalAnalyzed;
     const negRatio = neg / totalAnalyzed;
@@ -214,15 +220,16 @@ app.post('/analyze', async (req, res) => {
     else if (negRatio >= 0.6) verdict = -2;
     else if (negRatio >= 0.4) verdict = -1;
 
-    // Select helpful comments
     const helpfulComments = [
         ...analysis.positive.slice(0, 2),
         ...analysis.neutral.slice(0, 2),
         analysis.negative[0]
     ].filter(Boolean).slice(0, 5);
 
-    // Save to Supabase
-    const { error } = await supabase
+    const realTotal = 3600; // You can make this dynamic later
+
+    // Step 4: Save new analysis
+    const { error: saveError } = await supabase
         .from('video_sentiment_summary')
         .upsert([
             {
@@ -233,13 +240,14 @@ app.post('/analyze', async (req, res) => {
                 real_total_comments: realTotal,
                 comments_data: [totalAnalyzed, pos, neutral, neg]
             }
-        ], { onConflict: 'videoid' }); // 🔐 ensure no duplicate error
+        ], { onConflict: 'videoid' });
 
-    if (error) {
-        console.error("Error saving to Supabase:", error.message);
+    if (saveError) {
+        console.error("Error saving to Supabase:", saveError.message);
         return res.status(500).json({ error: "Failed to save analysis result." });
     }
 
+    // Step 5: Return newly generated data
     res.json({
         summary: analysis.summary,
         most_helpful_comments: helpfulComments,
@@ -247,22 +255,6 @@ app.post('/analyze', async (req, res) => {
         real_total_comments: realTotal,
         comments_data: [totalAnalyzed, pos, neutral, neg]
     });
-});
-
-
-// API Endpoint to Retrieve Results
-app.get('/sentiment/:videoId', async (req, res) => {
-    const { videoId } = req.params;
-
-    const { data, error } = await supabase
-        .from('youtube_sentiment')
-        .select('*')
-        .eq('videoid', videoId)
-        .single();
-
-    if (error) return res.status(500).json({ error: "No results found." });
-
-    res.json(data);
 });
 
 // Start Server
