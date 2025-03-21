@@ -20,16 +20,13 @@ let comments_data = [100, 100, 0, 0]; // defalt data
 async function fetchCommentAnalysis(videoId) {
   
   try {
-    const response = await fetch("https://3a2e5f36-027f-46e4-a81e-532081b32e8c.mock.pstmn.io/analyze", {
-      method: "GET",
+    const response = await fetch("https://ser517-scrumbros.onrender.com/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ videoId })
     });
-    // const response = await fetch("https://ser517-scrumbros.onrender.com/analyze", {
-      // const response = await fetch("http://localhost:3000/analyze", {
-      //   method: "POST",
-      //   headers: {
-      //     "Content-Type": "application/json"
-      //   },
-      //   body: JSON.stringify({ videoId })
 
     if (!response.ok) {
       throw new Error("Failed to fetch analysis");
@@ -38,7 +35,7 @@ async function fetchCommentAnalysis(videoId) {
     const data = await response.json();
     console.log("Analysis data:", data);
 
-    comments_data = data.comments_data || comments_data;
+    comments_data = data.comments_data.slice(1) || comments_data;
     return data.summary || "No analysis available";
   } catch (error) {
     console.error("Error fetching analysis:", error);
@@ -114,11 +111,11 @@ function renderChart() {
   window.myChart = new Chart(ctx, {
     type: "pie",
     data: {
-      labels: ["Total Analyzed", "Positive", "Neutral", "Negative"],
+      labels: ["Positive", "Neutral", "Negative"],
       datasets: [{
         data: comments_data,
-        backgroundColor: ["#36A2EB", "#4CAF50", "#FFC107", "#F44336"],
-        hoverOffset: 4
+        backgroundColor: ["#4CAF50", "#FFC107", "#F44336"],
+        hoverOffset: 3
       }]
     },
     options: {
