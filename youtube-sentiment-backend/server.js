@@ -221,10 +221,10 @@ app.post('/analyze', async (req, res) => {
     else if (negRatio >= 0.4) verdict = -1;
 
     const helpfulComments = [
-        ...analysis.positive.slice(0, 2),
-        ...analysis.neutral.slice(0, 2),
-        analysis.negative[0]
-    ].filter(Boolean).slice(0, 5);
+    ...(Array.isArray(analysis.positive) ? analysis.positive.slice(0, 2) : []),
+    ...(Array.isArray(analysis.neutral) ? analysis.neutral.slice(0, 2) : []),
+    ...(Array.isArray(analysis.negative) && analysis.negative.length > 0 ? [analysis.negative[0]] : [])
+].filter(Boolean).slice(0, 5);
 
     const realTotal = 3600; // You can make this dynamic later
 
