@@ -149,41 +149,35 @@ async function addAnalyzerContainer() {
       const analysis = await fetchCommentAnalysis(videoId);
       summaryDiv.textContent = `${analysis.summary}`;
       total_Comments.textContent = `(${analysis.totalComments} Comments)`;
-      let verdictData = `${analysis.verdict}`;
-      console.log("Stored verdict:", verdictData);
+      console.log("Stored verdict:", `${analysis.verdict}`);
 
-      let vText = "";
-      let vIcon = "";
-
-      switch (verdictData) {
+      switch (Number(analysis.verdict)) {
         case -2:
-          vText = "Mostly Negative";
-          vIcon = chrome.runtime.getURL("images/MostlyNegative.png");
+          verdictText.textContent = "Mostly Negative";
+          verdictIcon.src = chrome.runtime.getURL("images/MostlyNegative.png");
           break;
         case -1:
-          vText = "Negative";
-          vIcon = chrome.runtime.getURL("images/Negative.png");
+          verdictText.textContent = "Negative";
+          verdictIcon.src = chrome.runtime.getURL("images/Negative.png");
           break;
         case 0:
-          vText = "Neutral";
-          vIcon = chrome.runtime.getURL("images/Neutral.png");
+          verdictText.textContent = "Neutral";
+          verdictIcon.src = chrome.runtime.getURL("images/Neutral.png");
           break;
         case 1:
-          vText = "Positive";
-          vIcon = chrome.runtime.getURL("images/Positive.png");
+          verdictText.textContent = "Positive";
+          verdictIcon.src = chrome.runtime.getURL("images/Positive.png");
           break;
         case 2:
-          vText = "Mostly Positive";
-          vIcon = chrome.runtime.getURL("images/MostlyPositive.png");
+          verdictText.textContent = "Mostly Positive";
+          verdictIcon.src = chrome.runtime.getURL("images/MostlyPositive.png");
           break;
         default:
-          vText = "Unknown";
-          vIcon = chrome.runtime.getURL("images/Unknown.png");
+          console.warn("Unexpected verdict value:", `${analysis.verdict}`);
+          verdictText.textContent = "Unknown";
+          verdictIcon.src = chrome.runtime.getURL("images/Unknown.png");
           break;
       }
-
-      verdictIcon.src = vIcon;
-      verdictText.textContent = vText;
 
       analysis.mostHelpfulComments.forEach(comment => {
       const commentElement = document.createElement('div');
@@ -220,6 +214,8 @@ function renderChart() {
 
   console.log("Rendering chart with data:", comments_data);
   
+  let totalAnalyzed = comments_data.reduce((sum, value) => sum + value, 0);
+
   window.myChart = new Chart(ctx, {
     type: "pie",
     data: {
@@ -248,8 +244,7 @@ function renderChart() {
         tooltip: {
           callbacks: {
             label: function(tooltipItem) {
-              let value = tooltipItem.raw;
-              return `${value}%`;
+              return `${((tooltipItem.raw / totalAnalyzed) * 100).toFixed(2)}%`;
             }
           }
         }
