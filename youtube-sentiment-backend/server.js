@@ -1,83 +1,130 @@
 require('dotenv').config();
 const express = require('express');
-const axios = require('axios');
+const nodemailer = require('nodemailer');
 const { createClient } = require('@supabase/supabase-js');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 app.use(express.json());
 
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
-// Function to validate password strength
+// Gmail SMTP
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
+
+// Strong password validator
 function isStrongPassword(password) {
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%?&])[A-Za-z\d@$!%?&]{8,}$/;
-    return passwordRegex.test(password);
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%?&])[A-Za-z\d@$!%?&]{8,}$/;
+  return passwordRegex.test(password);
 }
 
-// Register API with password validation
+// ✅ REGISTER + Send confirmation email
 app.post('/register', async (req, res) => {
-    const { email, password } = req.body;
+  const { email, password } = req.body;
 
-    if (!email || !password) {
-        return res.status(400).json({ error: "Email and password are required" });
+  if (!email || !password)
+    return res.status(400).json({ error: "Email and password are required" });
+
+  if (!isStrongPassword(password))
+    return res.status(400).json({
+      error: "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character."
+    });
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: "1d" });
+
+    const { data, error } = await supabase
+      .from('users')
+      .insert([{ email, password: hashedPassword, is_verified: false, confirmation_token: token }])
+      .select();
+
+    if (error) {
+      console.error("Supabase insert error:", error.message);
+      return res.status(500).json({ error: "Failed to register user" });
     }
 
-    if (!isStrongPassword(password)) {
-        return res.status(400).json({ error: "Password must be at least 8 characters long and include at least one uppercase letter, one lowercase letter, one number, and one special character." });
-    }
+    const confirmLink = `${process.env.BASE_URL}/confirm/${token}`;
 
-    try {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const { data, error } = await supabase
-            .from('users')
-            .insert([{ email, password: hashedPassword }])
-            .select();
+    await transporter.sendMail({
+      from: `"Verify your Email" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "Confirm your Email",
+      html: `<h3>Click to confirm your email</h3><a href="${confirmLink}">${confirmLink}</a>`
+    });
 
-        if (error) {
-            console.error("Supabase insert error:", error.message);
-            return res.status(500).json({ error: "Failed to register user" });
-        }
+    res.json({ message: "Registration successful. Please check your email to confirm." });
 
-        res.json({ message: "User registered successfully", user: data[0] });
-    } catch (err) {
-        console.error("Error registering user:", err.message);
-        res.status(500).json({ error: "Internal server error" });
-    }
+  } catch (err) {
+    console.error("Registration error:", err.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
-// Login API
+// ✅ CONFIRMATION endpoint
+app.get('/confirm/:token', async (req, res) => {
+  try {
+    const decoded = jwt.verify(req.params.token, process.env.JWT_SECRET);
+    const { email } = decoded;
+
+    const { data, error } = await supabase
+      .from('users')
+      .update({ is_verified: true, confirmation_token: null })
+      .eq('email', email)
+      .eq('is_verified', false)
+      .select();
+
+    if (error || !data || data.length === 0)
+      return res.status(400).send("Invalid or already verified");
+
+    res.send("Email confirmed! You can now log in.");
+  } catch (err) {
+    console.error("Confirmation error:", err.message);
+    res.status(400).send("Invalid or expired confirmation link");
+  }
+});
+
+// ✅ LOGIN with verification + return auth JWT
 app.post('/login', async (req, res) => {
-    const { email, password } = req.body;
+  const { email, password } = req.body;
 
-    if (!email || !password) {
-        return res.status(400).json({ error: "Email and password are required" });
-    }
+  if (!email || !password)
+    return res.status(400).json({ error: "Email and password are required" });
 
-    try {
-        const { data, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('email', email)
-            .single();
+  try {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
 
-        if (error || !data) {
-            return res.status(401).json({ error: "Invalid email or password" });
-        }
+    if (error || !user)
+      return res.status(401).json({ error: "Invalid email or password" });
 
-        const isMatch = await bcrypt.compare(password, data.password);
-        if (!isMatch) {
-            return res.status(401).json({ error: "Invalid email or password" });
-        }
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch)
+      return res.status(401).json({ error: "Invalid email or password" });
 
-        res.json({ message: "Login successful", user: { id: data.id, email: data.email } });
-    } catch (err) {
-        console.error("Error logging in user:", err.message);
-        res.status(500).json({ error: "Internal server error" });
-    }
+    if (!user.is_verified)
+      return res.status(403).json({ error: "Please confirm your email before logging in." });
+
+    const authToken = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1d' });
+
+    res.json({ message: "Login successful", token: authToken });
+
+  } catch (err) {
+    console.error("Login error:", err.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
+
 
 // Fetch YouTube Comments
 async function fetchYouTubeComments(videoId) {
