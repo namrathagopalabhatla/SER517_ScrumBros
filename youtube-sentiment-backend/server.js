@@ -76,7 +76,7 @@ async function fetchYouTubeComments(videoId) {
     }
 
     console.log(`Collected ${comments.length} top-level comments.`);
-    return comments.slice(0, 100); // Limit to exactly 100 for analysis
+    return comments.slice(0, maxToCollect); 
 }
 
 
@@ -92,17 +92,47 @@ async function analyzeSentiment(comments) {
         .slice(0, 100)
         .map(c => c.trim().slice(0, 200));
 
-    const prompt = `You are a sentiment analysis assistant. Classify each of the following YouTube comments into one of the following categories: "positive", "negative", or "neutral". Do not skip any comment. Return a summary at the end. 
-    
-Respond strictly in this JSON format:
+    // AI prompt ensuring structured JSON output
+    const prompt = `You are an AI assistant specializing in sentiment analysis. Your task is to categorize each YouTube comment into one of the following categories: "positive", "negative", or "neutral". Every comment must be categorized—do not skip any.
+
+Additionally, provide:
+1. A brief **summary** of the overall sentiment in the comments.
+2. **Five helpful comments** that best represent the general discussion.
+
+### **JSON Output Format**
+Your response **must** be structured strictly as follows:
+
 {
-  "positive": [ ... ],
-  "negative": [ ... ],
-  "neutral": [ ... ],
-  "summary": "..."
+    "summary": "A brief overview of the overall sentiment in the comments.",
+    "most_helpful_comments": [
+        "Comment 1",
+        "Comment 2",
+        "Comment 3",
+        "Comment 4",
+        "Comment 5"
+    ],
+    "verdict": 0,
+    "real_total_comments": 3600,
+    "comments_data": [
+        total_comments_analyzed,
+        total_positive,
+        total_neutral,
+        total_negative
+    ]
 }
 
-Comments:
+- **Only categorize the first 100 comments provided**.
+- **total_comments_analyzed must be exactly the number of comments analyzed (max 100)**.
+- **total_positive + total_neutral + total_negative must equal total_comments_analyzed**.
+- **real_total_comments is 3600 but represents all YouTube comments, not just the analyzed ones**.
+- The **verdict** is determined based on:
+  - **2** if positive comments are ≥ 60%.
+  - **1** if positive comments are ≥ 40%.
+  - **-1** if negative comments are ≥ 40%.
+  - **-2** if negative comments are ≥ 60%.
+  - **0** otherwise.
+
+### **YouTube Comments to Analyze**
 ${trimmedComments.map((c, i) => `${i + 1}. ${c}`).join('\n')}
 `;
 
@@ -123,30 +153,42 @@ ${trimmedComments.map((c, i) => `${i + 1}. ${c}`).join('\n')}
             }
         );
 
-        // Parse content
+        // Extract response content
         const content = response.data.choices?.[0]?.message?.content;
         if (!content) {
             console.error("No content returned from OpenAI.");
             return null;
         }
 
-        // const cleaned = content.replace(/```json|```/g, '').trim();
-        // return JSON.parse(cleaned);
-        let cleanedJson;
+        // Attempt to repair and parse JSON
         try {
-            cleanedJson = jsonrepair(content);
-            return JSON.parse(cleanedJson);
+            const cleanedJson = jsonrepair(content);
+            const parsedData = JSON.parse(cleanedJson);
+
+            // 🔹 Step 1: Extract and validate numbers
+            let totalAnalyzed = parsedData.comments_data[0];  // AI's reported count
+            let totalPositive = parsedData.comments_data[1];
+            let totalNeutral = parsedData.comments_data[2];
+            let totalNegative = parsedData.comments_data[3];
+
+            // 🔹 Step 2: Ensure total is correctly limited to 100
+            const calculatedTotal = totalPositive + totalNeutral + totalNegative;
+
+            if (calculatedTotal !== totalAnalyzed || totalAnalyzed > 100) {
+                console.error(`Mismatch in counts: AI reported ${totalAnalyzed}, but sum is ${calculatedTotal}. Fixing...`);
+                totalAnalyzed = Math.min(100, calculatedTotal);  // Ensure it doesn't exceed 100
+                parsedData.comments_data[0] = totalAnalyzed;
+            }
+
+            return parsedData;
+
         } catch (repairError) {
             console.error("JSON Repair Failed:", repairError.message);
             return null;
         }
 
     } catch (error) {
-        if (error.response) {
-            console.error("OpenAI API Error:", error.response.status, error.response.data);
-        } else {
-            console.error("Request failed:", error.message);
-        }
+        console.error("OpenAI API Error:", error.response?.status, error.response?.data || error.message);
         return null;
     }
 }
@@ -186,7 +228,7 @@ app.post('/analyze', async (req, res) => {
 
     if (!videoId) return res.status(400).json({ error: "videoId is required" });
 
-    // Step 1: Try to fetch existing sentiment analysis
+    // Step 1: Check if analysis already exists
     const { data: existingData, error: fetchError } = await supabase
         .from('video_sentiment_summary')
         .select('*')
@@ -198,7 +240,7 @@ app.post('/analyze', async (req, res) => {
         return res.json(existingData);
     }
 
-    // Step 2: Otherwise, analyze the comments
+    // Step 2: Fetch comments and analyze sentiment
     console.log(`Fetching comments for video: ${videoId}`);
     const comments = await fetchYouTubeComments(videoId);
 
@@ -206,39 +248,20 @@ app.post('/analyze', async (req, res) => {
     const analysis = await analyzeSentiment(comments);
     if (!analysis) return res.status(500).json({ error: "Sentiment analysis failed" });
 
-    const pos = analysis.positive?.length || 0;
-    const neg = analysis.negative?.length || 0;
-    const neutral = analysis.neutral?.length || 0;
-    const totalAnalyzed = pos + neg + neutral;
+    // Step 3: Directly use AI's structured response
+    const { summary, most_helpful_comments, verdict, real_total_comments, comments_data } = analysis;
 
-    // Step 3: Compute verdict
-    let verdict = 0;
-    const posRatio = pos / totalAnalyzed;
-    const negRatio = neg / totalAnalyzed;
-    if (posRatio >= 0.6) verdict = 2;
-    else if (posRatio >= 0.4) verdict = 1;
-    else if (negRatio >= 0.6) verdict = -2;
-    else if (negRatio >= 0.4) verdict = -1;
-
-    const helpfulComments = [
-    ...(Array.isArray(analysis.positive) ? analysis.positive.slice(0, 2) : []),
-    ...(Array.isArray(analysis.neutral) ? analysis.neutral.slice(0, 2) : []),
-    ...(Array.isArray(analysis.negative) && analysis.negative.length > 0 ? [analysis.negative[0]] : [])
-].filter(Boolean).slice(0, 5);
-
-    const realTotal = 3600; // You can make this dynamic later
-
-    // Step 4: Save new analysis
+    // Step 4: Save new analysis to Supabase
     const { error: saveError } = await supabase
         .from('video_sentiment_summary')
         .upsert([
             {
                 videoid: videoId,
-                summary: analysis.summary,
-                most_helpful_comments: helpfulComments,
-                verdict: verdict,
-                real_total_comments: realTotal,
-                comments_data: [totalAnalyzed, pos, neutral, neg]
+                summary,
+                most_helpful_comments,
+                verdict,
+                real_total_comments,
+                comments_data
             }
         ], { onConflict: 'videoid' });
 
@@ -247,16 +270,9 @@ app.post('/analyze', async (req, res) => {
         return res.status(500).json({ error: "Failed to save analysis result." });
     }
 
-    // Step 5: Return newly generated data
-    res.json({
-        summary: analysis.summary,
-        most_helpful_comments: helpfulComments,
-        verdict: verdict,
-        real_total_comments: realTotal,
-        comments_data: [totalAnalyzed, pos, neutral, neg]
-    });
+    // Step 5: Return the structured AI-generated response
+    res.json({ summary, most_helpful_comments, verdict, real_total_comments, comments_data });
 });
-
 // Start Server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
