@@ -36,7 +36,7 @@ async function fetchCommentAnalysis(videoId) {
     console.log("Analysis data:", data);
 
     comments_data = data.comments_data.slice(1) || comments_data;
-    return {summary: data.summary || "No analysis available", verdict: data.verdict || "No verdict available", totalComments: data.real_total_comments || "No comments available", mostHelpfulComments: data.most_helpful_comments || []};
+    return {summary: data.summary || "No analysis available", verdict: data.verdict !== undefined && data.verdict !== null ? data.verdict : "No verdict available", totalComments: data.real_total_comments || "No comments available", mostHelpfulComments: data.most_helpful_comments || []};
   } catch (error) {
     console.error("Error fetching analysis:", error);
     return {summary: "Error fetching analysis", verdict: "Error fetching verdict", totalComments: "Error fetching comments", mostHelpfulComments: []};
@@ -100,6 +100,8 @@ async function addAnalyzerContainer() {
 
   const verdictIcon = document.createElement('img');
   verdictIcon.style.marginRight = "10px";
+  verdictIcon.style.width = "24px";
+  verdictIcon.style.height = "24px";
   
   const verdictText = document.createElement('span');
   verdictText.className = 'yt-comment-analyzer-verdict-text';
@@ -149,9 +151,8 @@ async function addAnalyzerContainer() {
       const analysis = await fetchCommentAnalysis(videoId);
       summaryDiv.textContent = `${analysis.summary}`;
       total_Comments.textContent = `(${analysis.totalComments} Comments)`;
-      console.log("Stored verdict:", `${analysis.verdict}`);
-
-      switch (Number(analysis.verdict)) {
+      console.log("Verdict Type:", typeof analysis.verdict, "Verdict:", analysis.verdict);
+      switch (analysis.verdict) {
         case -2:
           verdictText.textContent = "Mostly Negative";
           verdictIcon.src = chrome.runtime.getURL("images/MostlyNegative.png");
