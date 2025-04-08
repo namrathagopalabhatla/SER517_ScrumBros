@@ -1,5 +1,6 @@
 {
   "dependencies": {
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "jsonrepair": "^3.12.0"
   }
 }
