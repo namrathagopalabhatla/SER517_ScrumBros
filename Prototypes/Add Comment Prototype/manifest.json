@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Youtube Comment Analyser",
+  "version": "1.0",
+  "description": "A Chrome extension to analyze YouTube comments to give you a clear picture of viewer sentiments.",
+  "permissions": ["activeTab"],
+  "content_scripts": [
+    {
+      "matches": ["*://*.youtube.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ]
+}
