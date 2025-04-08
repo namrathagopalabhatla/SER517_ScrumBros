@@ -2,12 +2,16 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
+const { jsonrepair } = require("jsonrepair");
+
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const cors = require('cors');
+
 
 const app = express();
 app.use(express.json());
 
-const cors = require('cors');
 
     app.options('*', cors());
     const corsOptions = {
@@ -331,7 +335,6 @@ app.post('/analyze', async (req, res) => {
     const { videoId, autoRetry = false } = req.body;
 
     if (!videoId) return res.status(400).json({ error: "videoId is required" });
-
     // Step 1: Check if analysis already exists
     const { data: existingData, error: fetchError } = await supabase
         .from('video_sentiment_summary')
