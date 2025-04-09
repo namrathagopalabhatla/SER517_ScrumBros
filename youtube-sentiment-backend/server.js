@@ -3,7 +3,7 @@ const express = require('express');
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
 const { jsonrepair } = require("jsonrepair");
-
+const nodemailer = require('nodemailer');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
@@ -244,94 +244,11 @@ function authenticateToken(req, res, next) {
     });
 }
 
-// Register API Endpoint
-app.post('/register', async (req, res) => {
-    const { email, password } = req.body;
 
-    if (!email || !password) {
-        return res.status(400).json({ error: "Email and password are required." });
-    }
 
-    try {
-        // Check if user already exists
-        const { data: existingUser, error: userError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('email', email)
-            .single();
-
-        if (userError) {
-            return res.status(500).json({ error: "Error checking for existing user." });
-        }
-
-        if (existingUser) {
-            return res.status(400).json({ error: "User already exists." });
-        }
-
-        // Hash the password
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        // Insert the new user into the database
-        const { data, error } = await supabase
-            .from('users')
-            .insert([{ email, password: hashedPassword }]);
-
-        if (error) {
-            return res.status(500).json({ error: "Error registering user." });
-        }
-
-        res.status(201).json({ message: "User registered successfully." });
-    } catch (error) {
-        console.error("Registration error:", error);
-        res.status(500).json({ error: "Server error." });
-    }
-});
-
-// Login API Endpoint
-app.post('/login', async (req, res) => {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-        return res.status(400).json({ error: "Email and password are required." });
-    }
-
-    try {
-        // Check if the user exists
-        const { data: user, error: userError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('email', email)
-            .single();
-
-        if (userError) {
-            return res.status(500).json({ error: "Error fetching user data." });
-        }
-
-        if (!user) {
-            return res.status(400).json({ error: "Invalid credentials." });
-        }
-
-        // Compare the hashed password
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return res.status(400).json({ error: "Invalid credentials." });
-        }
-
-        // Generate a JWT token
-        const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET, {
-            expiresIn: '1h'
-        });
-
-        // Send the token in the response
-        res.json({ token });
-    } catch (error) {
-        console.error("Login error:", error);
-        res.status(500).json({ error: "Server error." });
-    }
-});
 
 // API Endpoint to Analyze a Video
-app.post('/analyze', async (req, res) => {
+app.post('/analyze', authenticateToken, async (req, res) => {
     const { videoId, autoRetry = false } = req.body;
 
     if (!videoId) return res.status(400).json({ error: "videoId is required" });
@@ -380,6 +297,174 @@ app.post('/analyze', async (req, res) => {
     // Step 5: Return the structured AI-generated response
     res.json({ summary, most_helpful_comments, verdict, real_total_comments, comments_data });
 });
+
+
+
+
+app.post('/register', async (req, res) => {
+    const { firstName, lastName, email, password } = req.body;
+  
+    if (!firstName || !lastName || !email || !password) {
+      return res.status(400).json({ error: 'All fields are required.' });
+    }
+  
+    try {
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .maybeSingle();
+  
+      if (existingUser) {
+        return res.status(400).json({ error: 'User already exists.' });
+      }
+  
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const verificationToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '30m' });
+  
+      const { error: insertError } = await supabase.from('users').insert([
+        { email, password: hashedPassword, first_name: firstName, last_name: lastName, is_verified: false },
+      ]);
+  
+      if (insertError) throw insertError;
+  
+      const verificationLink = `https://ser517-scrumbros.onrender.com/verify-email?token=${verificationToken}`;
+  
+      await transporter.sendMail({
+        from: `Support <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: 'Verify Your Email',
+        html: `<p>Click the link to verify your email:</p><a href="${verificationLink}">${verificationLink}</a>`
+      });
+  
+      res.status(200).json({ message: 'Registration successful. Please verify your email.' });
+    } catch (err) {
+      console.error('Register error:', err);
+      res.status(500).json({ error: 'Server error during registration.' });
+    }
+  });
+  
+  
+  app.get('/verify-email', async (req, res) => {
+    const token = req.query.token;
+    if (!token) return res.status(400).json({ error: 'Token is required.' });
+  
+    try {
+      const { email } = jwt.verify(token, process.env.JWT_SECRET);
+  
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ is_verified: true })
+        .eq('email', email);
+  
+      if (updateError) throw updateError;
+      res.send('Email verified successfully. You may now login.');
+    } catch (err) {
+      console.error('Verification error:', err);
+      res.status(400).json({ error: 'Invalid or expired token.' });
+    }
+  });
+  
+
+  app.post('/login', async (req, res) => {
+    const { email, password } = req.body;
+  
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
+  
+    try {
+      const { data: user } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .maybeSingle();
+  
+      if (!user) {
+        return res.status(400).json({ error: 'Invalid credentials.' });
+      }
+  
+      if (!user.is_verified) {
+        return res.status(403).json({ error: 'Please verify your email first.' });
+      }
+  
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        return res.status(400).json({ error: 'Invalid credentials.' });
+      }
+  
+      const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET, {
+        expiresIn: '1h',
+      });
+  
+      res.json({ token });
+    } catch (err) {
+      console.error('Login error:', err);
+      res.status(500).json({ error: 'Server error during login.' });
+    }
+  });
+  
+  
+  app.post('/forgot-password', async (req, res) => {
+    const { email } = req.body;
+  
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+  
+    try {
+      const { data: user } = await supabase.from('users').select('*').eq('email', email).maybeSingle();
+  
+      if (!user) return res.status(404).json({ error: 'User not found.' });
+  
+      const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '15m' });
+      const resetLink = `https://ser517-scrumbros.onrender.com/reset-password?token=${token}`;
+  
+      await transporter.sendMail({
+        from: `Support <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: 'Reset Your Password',
+        html: `<p>Click the link to reset your password:</p><a href="${resetLink}">${resetLink}</a>`
+      });
+  
+      res.json({ message: 'Password reset email sent.' });
+    } catch (err) {
+      console.error('Forgot password error:', err);
+      res.status(500).json({ error: 'Server error during password reset request.' });
+    }
+  });
+  
+ 
+  app.post('/reset-password', async (req, res) => {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) return res.status(400).json({ error: 'Token and new password are required.' });
+  
+    try {
+      const { email } = jwt.verify(token, process.env.JWT_SECRET);
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+  
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ password: hashedPassword })
+        .eq('email', email);
+  
+      if (updateError) throw updateError;
+  
+      res.json({ message: 'Password reset successful.' });
+    } catch (err) {
+      console.error('Reset password error:', err);
+      res.status(400).json({ error: 'Invalid or expired token.' });
+    }
+  });
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+  
+
+
 // Start Server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
