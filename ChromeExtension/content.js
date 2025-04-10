@@ -50,7 +50,7 @@ function getVideoId() {
 
 async function addAnalyzerContainer() {
   
-  const textData = ["ScrumBros Sentiment Scoop", "Your Comments, Our Insights!"];
+  const textData = ["Analysis Scoop", "Your Comments, Our Insights!"];
 
   if (document.querySelector('.yt-comment-analyzer-container')) {
     return;
@@ -84,6 +84,11 @@ async function addAnalyzerContainer() {
 
   const containerDiv = document.createElement('div');
   containerDiv.className = 'yt-comment-analyzer-container';
+
+  const loadingDiv = document.createElement('div');
+  loadingDiv.className = 'yt-comment-analyzer-loading';
+  loadingDiv.innerHTML = '<div class="loading-spinner"></div><span>Loading Analysis...</span>';
+  containerDiv.appendChild(loadingDiv);
 
   const leftDiv = document.createElement('div');
   leftDiv.className = 'yt-comment-analyzer-summary';
@@ -123,7 +128,7 @@ async function addAnalyzerContainer() {
   summaryDiv.className = 'yt-comment-analyzer-summary-text';
 
   const helpfulReviewsText = document.createElement('div');
-  helpfulReviewsText.textContent = "MOST HELPFUL REVIEWS";
+  helpfulReviewsText.textContent = "MOST HELPFUL COMMENTS";
   helpfulReviewsText.className = 'yt-comment-analyzer-most-helpful-reviews';
 
   const helpfulCommentsDiv = document.createElement('div');
@@ -148,7 +153,9 @@ async function addAnalyzerContainer() {
   const videoId = getVideoId();
   if (videoId) {
     loadChartJS(async function() {
+      loadingDiv.style.display = "flex";
       const analysis = await fetchCommentAnalysis(videoId);
+      loadingDiv.style.display = "none";
       summaryDiv.textContent = `${analysis.summary}`;
       total_Comments.textContent = `(${analysis.totalComments} Comments)`;
       console.log("Verdict Type:", typeof analysis.verdict, "Verdict:", analysis.verdict);
