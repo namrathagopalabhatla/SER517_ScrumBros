@@ -2,11 +2,16 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
+const { jsonrepair } = require("jsonrepair");
+const nodemailer = require('nodemailer');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const cors = require('cors');
+
 
 const app = express();
 app.use(express.json());
 
-const cors = require('cors');
 
     app.options('*', cors());
     const corsOptions = {
@@ -29,8 +34,6 @@ app.use((req, res, next) => {
     res.header("Access-Control-Allow-Credentials", "true");
     next();
 });
-
-
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -77,7 +80,7 @@ async function fetchYouTubeComments(videoId) {
     }
 
     console.log(`Collected ${comments.length} top-level comments.`);
-    return comments.slice(0, 100); // Limit to exactly 100 for analysis
+    return comments.slice(0, maxToCollect); 
 }
 
 
@@ -93,17 +96,47 @@ async function analyzeSentiment(comments) {
         .slice(0, 100)
         .map(c => c.trim().slice(0, 200));
 
-    const prompt = `You are a sentiment analysis assistant. Classify each of the following YouTube comments into one of the following categories: "positive", "negative", or "neutral". Do not skip any comment. Return a summary at the end. 
-    
-Respond strictly in this JSON format:
+    // AI prompt ensuring structured JSON output
+    const prompt = `You are an AI assistant specializing in sentiment analysis. Your task is to categorize each YouTube comment into one of the following categories: "positive", "negative", or "neutral". Every comment must be categorized—do not skip any.
+
+Additionally, provide:
+1. A brief **summary** of the overall sentiment in the comments.
+2. **Five helpful comments** that best represent the general discussion.
+
+### **JSON Output Format**
+Your response **must** be structured strictly as follows:
+
 {
-  "positive": [ ... ],
-  "negative": [ ... ],
-  "neutral": [ ... ],
-  "summary": "..."
+    "summary": "A brief overview of the overall sentiment in the comments.",
+    "most_helpful_comments": [
+        "Comment 1",
+        "Comment 2",
+        "Comment 3",
+        "Comment 4",
+        "Comment 5"
+    ],
+    "verdict": 0,
+    "real_total_comments": 3600,
+    "comments_data": [
+        total_comments_analyzed,
+        total_positive,
+        total_neutral,
+        total_negative
+    ]
 }
 
-Comments:
+- **Only categorize the first 100 comments provided**.
+- **total_comments_analyzed must be exactly the number of comments analyzed (max 100)**.
+- **total_positive + total_neutral + total_negative must equal total_comments_analyzed**.
+- **real_total_comments is 3600 but represents all YouTube comments, not just the analyzed ones**.
+- The **verdict** is determined based on:
+  - **2** if positive comments are ≥ 60%.
+  - **1** if positive comments are ≥ 40%.
+  - **-1** if negative comments are ≥ 40%.
+  - **-2** if negative comments are ≥ 60%.
+  - **0** otherwise.
+
+### **YouTube Comments to Analyze**
 ${trimmedComments.map((c, i) => `${i + 1}. ${c}`).join('\n')}
 `;
 
@@ -111,10 +144,10 @@ ${trimmedComments.map((c, i) => `${i + 1}. ${c}`).join('\n')}
         const response = await axios.post(
             "https://api.openai.com/v1/chat/completions",
             {
-                model: "gpt-3.5-turbo-0125", 
+                model: "gpt-4o-mini", 
                 messages: [{ role: "user", content: prompt }],
                 temperature: 0.4,
-                max_tokens: 700 
+                max_tokens: 1000
             },
             {
                 headers: {
@@ -124,22 +157,42 @@ ${trimmedComments.map((c, i) => `${i + 1}. ${c}`).join('\n')}
             }
         );
 
-        // Parse content
+        // Extract response content
         const content = response.data.choices?.[0]?.message?.content;
         if (!content) {
             console.error("No content returned from OpenAI.");
             return null;
         }
 
-        const cleaned = content.replace(/```json|```/g, '').trim();
-        return JSON.parse(cleaned);
+        // Attempt to repair and parse JSON
+        try {
+            const cleanedJson = jsonrepair(content);
+            const parsedData = JSON.parse(cleanedJson);
+
+            // 🔹 Step 1: Extract and validate numbers
+            let totalAnalyzed = parsedData.comments_data[0];  // AI's reported count
+            let totalPositive = parsedData.comments_data[1];
+            let totalNeutral = parsedData.comments_data[2];
+            let totalNegative = parsedData.comments_data[3];
+
+            // 🔹 Step 2: Ensure total is correctly limited to 100
+            const calculatedTotal = totalPositive + totalNeutral + totalNegative;
+
+            if (calculatedTotal !== totalAnalyzed || totalAnalyzed > 100) {
+                console.error(`Mismatch in counts: AI reported ${totalAnalyzed}, but sum is ${calculatedTotal}. Fixing...`);
+                totalAnalyzed = Math.min(100, calculatedTotal);  // Ensure it doesn't exceed 100
+                parsedData.comments_data[0] = totalAnalyzed;
+            }
+
+            return parsedData;
+
+        } catch (repairError) {
+            console.error("JSON Repair Failed:", repairError.message);
+            return null;
+        }
 
     } catch (error) {
-        if (error.response) {
-            console.error("OpenAI API Error:", error.response.status, error.response.data);
-        } else {
-            console.error("Request failed:", error.message);
-        }
+        console.error("OpenAI API Error:", error.response?.status, error.response?.data || error.message);
         return null;
     }
 }
@@ -173,97 +226,244 @@ async function saveSentimentData(videoId, analysis) {
     if (error) console.error("Error saving to Supabase:", error.message);
 }
 
-// API Endpoint to Analyze a Video
-app.post('/analyze', async (req, res) => {
-    const { videoId } = req.body;
-    if (!videoId) return res.status(400).json({ error: "videoId is required" });
+// Middleware to authenticate user
+function authenticateToken(req, res, next) {
+    const token = req.headers['authorization'] && req.headers['authorization'].split(' ')[1];
 
-    // Check if this video was already analyzed
+    if (!token) {
+        return res.status(403).json({ error: "Access denied. No token provided." });
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) {
+            return res.status(403).json({ error: "Invalid or expired token." });
+        }
+
+        req.user = user;
+        next();
+    });
+}
+
+
+
+
+// API Endpoint to Analyze a Video
+app.post('/analyze', authenticateToken, async (req, res) => {
+    const { videoId, autoRetry = false } = req.body;
+
+    if (!videoId) return res.status(400).json({ error: "videoId is required" });
+    // Step 1: Check if analysis already exists
     const { data: existingData, error: fetchError } = await supabase
         .from('video_sentiment_summary')
         .select('*')
         .eq('videoid', videoId)
         .single();
 
-    if (existingData) {
-        console.log(`📦 Returning cached result for video: ${videoId}`);
+    if (existingData && !autoRetry) {
+        console.log(`Returning cached result for video: ${videoId}`);
         return res.json(existingData);
     }
 
+    // Step 2: Fetch comments and analyze sentiment
     console.log(`Fetching comments for video: ${videoId}`);
     const comments = await fetchYouTubeComments(videoId);
-    const realTotal = 3600; // You can make this dynamic later if needed
 
     console.log(`Analyzing ${comments.length} comments...`);
     const analysis = await analyzeSentiment(comments);
     if (!analysis) return res.status(500).json({ error: "Sentiment analysis failed" });
 
-    // couting the totals
-    const pos = analysis.positive?.length || 0;
-    const neg = analysis.negative?.length || 0;
-    const neutral = analysis.neutral?.length || 0;
-    const totalAnalyzed = pos + neg + neutral;
+    // Step 3: Directly use AI's structured response
+    const { summary, most_helpful_comments, verdict, real_total_comments, comments_data } = analysis;
 
-
-    // Compute verdict score
-    let verdict = 0;
-    const posRatio = pos / totalAnalyzed;
-    const negRatio = neg / totalAnalyzed;
-    if (posRatio >= 0.6) verdict = 2;
-    else if (posRatio >= 0.4) verdict = 1;
-    else if (negRatio >= 0.6) verdict = -2;
-    else if (negRatio >= 0.4) verdict = -1;
-
-    // Select helpful comments
-    const helpfulComments = [
-        ...analysis.positive.slice(0, 2),
-        ...analysis.neutral.slice(0, 2),
-        analysis.negative[0]
-    ].filter(Boolean).slice(0, 5);
-
-    // Save to Supabase
-    const { error } = await supabase
+    // Step 4: Save new analysis to Supabase
+    const { error: saveError } = await supabase
         .from('video_sentiment_summary')
         .upsert([
             {
                 videoid: videoId,
-                summary: analysis.summary,
-                most_helpful_comments: helpfulComments,
-                verdict: verdict,
-                real_total_comments: realTotal,
-                comments_data: [totalAnalyzed, pos, neutral, neg]
+                summary,
+                most_helpful_comments,
+                verdict,
+                real_total_comments,
+                comments_data
             }
-        ], { onConflict: 'videoid' }); // 🔐 ensure no duplicate error
+        ], { onConflict: 'videoid' });
 
-    if (error) {
-        console.error("Error saving to Supabase:", error.message);
+    if (saveError) {
+        console.error("Error saving to Supabase:", saveError.message);
         return res.status(500).json({ error: "Failed to save analysis result." });
     }
 
-    res.json({
-        summary: analysis.summary,
-        most_helpful_comments: helpfulComments,
-        verdict: verdict,
-        real_total_comments: realTotal,
-        comments_data: [totalAnalyzed, pos, neutral, neg]
-    });
+    // Step 5: Return the structured AI-generated response
+    res.json({ summary, most_helpful_comments, verdict, real_total_comments, comments_data });
 });
 
 
-// API Endpoint to Retrieve Results
-app.get('/sentiment/:videoId', async (req, res) => {
-    const { videoId } = req.params;
 
-    const { data, error } = await supabase
-        .from('youtube_sentiment')
+
+app.post('/register', async (req, res) => {
+    const { firstName, lastName, email, password } = req.body;
+  
+    if (!firstName || !lastName || !email || !password) {
+      return res.status(400).json({ error: 'All fields are required.' });
+    }
+  
+    try {
+      const { data: existingUser } = await supabase
+        .from('users')
         .select('*')
-        .eq('videoid', videoId)
-        .single();
+        .eq('email', email)
+        .maybeSingle();
+  
+      if (existingUser) {
+        return res.status(400).json({ error: 'User already exists.' });
+      }
+  
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const verificationToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '30m' });
+  
+      const { error: insertError } = await supabase.from('users').insert([
+        { email, password: hashedPassword, first_name: firstName, last_name: lastName, is_verified: false },
+      ]);
+  
+      if (insertError) throw insertError;
+  
+      const verificationLink = `https://ser517-scrumbros.onrender.com/verify-email?token=${verificationToken}`;
+  
+      await transporter.sendMail({
+        from: `Support <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: 'Verify Your Email',
+        html: `<p>Click the link to verify your email:</p><a href="${verificationLink}">${verificationLink}</a>`
+      });
+  
+      res.status(200).json({ message: 'Registration successful. Please verify your email.' });
+    } catch (err) {
+      console.error('Register error:', err);
+      res.status(500).json({ error: 'Server error during registration.' });
+    }
+  });
+  
+  
+  app.get('/verify-email', async (req, res) => {
+    const token = req.query.token;
+    if (!token) return res.status(400).json({ error: 'Token is required.' });
+  
+    try {
+      const { email } = jwt.verify(token, process.env.JWT_SECRET);
+  
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ is_verified: true })
+        .eq('email', email);
+  
+      if (updateError) throw updateError;
+      res.send('Email verified successfully. You may now login.');
+    } catch (err) {
+      console.error('Verification error:', err);
+      res.status(400).json({ error: 'Invalid or expired token.' });
+    }
+  });
+  
 
-    if (error) return res.status(500).json({ error: "No results found." });
+  app.post('/login', async (req, res) => {
+    const { email, password } = req.body;
+  
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
+  
+    try {
+      const { data: user } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .maybeSingle();
+  
+      if (!user) {
+        return res.status(400).json({ error: 'Invalid credentials.' });
+      }
+  
+      if (!user.is_verified) {
+        return res.status(403).json({ error: 'Please verify your email first.' });
+      }
+  
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        return res.status(400).json({ error: 'Invalid credentials.' });
+      }
+  
+      const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET, {
+        expiresIn: '1h',
+      });
+  
+      res.json({ token });
+    } catch (err) {
+      console.error('Login error:', err);
+      res.status(500).json({ error: 'Server error during login.' });
+    }
+  });
+  
+  
+  app.post('/forgot-password', async (req, res) => {
+    const { email } = req.body;
+  
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+  
+    try {
+      const { data: user } = await supabase.from('users').select('*').eq('email', email).maybeSingle();
+  
+      if (!user) return res.status(404).json({ error: 'User not found.' });
+  
+      const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '15m' });
+      const resetLink = `https://ser517-scrumbros.onrender.com/reset-password?token=${token}`;
+  
+      await transporter.sendMail({
+        from: `Support <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: 'Reset Your Password',
+        html: `<p>Click the link to reset your password:</p><a href="${resetLink}">${resetLink}</a>`
+      });
+  
+      res.json({ message: 'Password reset email sent.' });
+    } catch (err) {
+      console.error('Forgot password error:', err);
+      res.status(500).json({ error: 'Server error during password reset request.' });
+    }
+  });
+  
+ 
+  app.post('/reset-password', async (req, res) => {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) return res.status(400).json({ error: 'Token and new password are required.' });
+  
+    try {
+      const { email } = jwt.verify(token, process.env.JWT_SECRET);
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+  
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ password: hashedPassword })
+        .eq('email', email);
+  
+      if (updateError) throw updateError;
+  
+      res.json({ message: 'Password reset successful.' });
+    } catch (err) {
+      console.error('Reset password error:', err);
+      res.status(400).json({ error: 'Invalid or expired token.' });
+    }
+  });
 
-    res.json(data);
-});
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+  
+
 
 // Start Server
 const PORT = process.env.PORT || 3000;
