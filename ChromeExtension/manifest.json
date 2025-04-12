@@ -3,16 +3,16 @@
   "name": "Youtube Comment Analyser",
   "version": "1.0",
   "description": "A Chrome extension to analyze YouTube comments to give you an unbiased viewer sentiment.",
-  "permissions": ["scripting", "activeTab"],
+  "permissions": ["scripting", "activeTab", "storage"],
   "content_scripts": [
     {
       "matches": ["*://*.youtube.com/*"],
       "js": ["content.js", "libs/chart.js"],
-      "css": ["styles.css"]
+      "css": ["styles.css", "auth.css"]
     }
   ],
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "auth.html"
   },
   "web_accessible_resources": [
     {

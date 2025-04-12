@@ -20,10 +20,15 @@ let comments_data = [100, 100, 0, 0]; // default data
 async function fetchCommentAnalysis(videoId) {
   
   try {
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      throw new Error("User is not authenticated. Please log in first.");
+    }
     const response = await fetch("https://ser517-scrumbros.onrender.com/analyze", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({ videoId })
     });

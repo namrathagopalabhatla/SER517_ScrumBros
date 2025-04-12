@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ScrumBros | Auth</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="auth.css" />
+</head>
+<body>
+  <div class="auth-container">
+    <h2 id="auth-title">Sign Up</h2>
+    <form id="auth-form">
+      <div id="name-fields">
+        <input type="text" name="firstName" placeholder="First Name" required />
+        <input type="text" name="lastName" placeholder="Last Name" required />
+      </div>
+      <input type="email" name="email" placeholder="Email" required />
+      <input type="password" name="password" placeholder="Password" required />
+
+      <div id="reset-token" style="display: none;">
+        <input type="text" name="token" placeholder="Reset Token" />
+        <input type="password" name="newPassword" placeholder="New Password" />
+      </div>
+
+      <button type="submit" id="submit-btn">Register</button>
+      <p class="message" id="auth-message"></p>
+    </form>
+
+    <div class="toggle-links">
+        <span id="link-signup">Sign Up</span> |
+        <span id="link-login">Login</span> |
+        <span id="link-forgot">Forgot Password</span> |
+        <span id="link-reset">Reset Password</span>
+    </div>      
+  </div>
+
+  <script src="auth.js"></script>
+</body>
+</html>
