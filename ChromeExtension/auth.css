@@ -1,67 +1,113 @@
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f5f5f5;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  margin: 0;
+}
+
 .auth-container {
-    width: 320px;
-    margin: 2rem auto;
-    padding: 2rem;
-    border: 1px solid #ccc;
-    border-radius: 10px;
-    background: #fff;
-    font-family: Arial, sans-serif;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  }
-  
-  .auth-container h2 {
-    text-align: center;
-    margin-bottom: 1.5rem;
-    color: #333;
-  }
-  
-  .auth-form {
-    display: flex;
-    flex-direction: column;
-  }
-  
-  .auth-container input {
-    margin-bottom: 1rem;
-    padding: 0.75rem;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    font-size: 0.95rem;
-  }
-  
-  .auth-container button {
-    padding: 0.8rem;
-    background-color: #4CAF50;
-    color: #fff;
-    border: none;
-    border-radius: 5px;
-    font-weight: bold;
-    cursor: pointer;
-    font-size: 1rem;
-    transition: background 0.3s ease;
-  }
-  
-  .auth-container button:hover {
-    background-color: #45a049;
-  }
-  
-  .message {
-    font-size: 0.85rem;
-    margin-top: 0.75rem;
-    text-align: center;
-  }
-  
-  .toggle-links {
-    display: flex;
-    justify-content: center;
-    flex-wrap: wrap;
-    margin-top: 1rem;
-    font-size: 0.85rem;
-    gap: 8px;
-  }
-  
-  .toggle-links span {
-    color: #007bff;
-    cursor: pointer;
-    text-decoration: underline;
-  }
-  
+  background-color: white;
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  max-width: 400px;
+  width: 100%;
+}
+
+h2 {
+  text-align: center;
+  margin-bottom: 24px;
+  color: #333;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+}
+
+input {
+  margin-bottom: 15px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+#name-fields {
+  display: flex;
+  gap: 10px;
+}
+
+#name-fields input {
+  flex: 1;
+}
+
+button {
+  background-color: #ff0000;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 12px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+button:hover {
+  background-color: #cc0000;
+}
+
+.message {
+  margin-top: 10px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.toggle-links {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.toggle-links span {
+  color: #ff0000;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.toggle-links span:hover {
+  color: #cc0000;
+  text-decoration: underline;
+}
+
+/* New styles for success message and buttons */
+.success-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.success-message p {
+  margin-bottom: 20px;
+  font-size: 16px;
+  color: #333;
+}
+
+.return-button, .logout-button {
+  margin-top: 10px;
+  width: 100%;
+  max-width: 250px;
+}
+
+.logout-button {
+  background-color: #f44336;
+  margin-bottom: 10px;
+}
+
+.logout-button:hover {
+  background-color: #d32f2f;
+}

@@ -1,9 +1,19 @@
 {
   "manifest_version": 3,
-  "name": "Youtube Comment Analyser",
+  "name": "YouTube Comment Analyzer",
   "version": "1.0",
-  "description": "A Chrome extension to analyze YouTube comments to give you an unbiased viewer sentiment.",
-  "permissions": ["scripting", "activeTab", "storage"],
+  "description": "Analyze sentiment of YouTube comments",
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://*.youtube.com/*",
+    "https://ser517-scrumbros.onrender.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": ["*://*.youtube.com/*"],
@@ -11,16 +21,22 @@
       "css": ["styles.css", "auth.css"]
     }
   ],
-  "action": {
-    "default_popup": "auth.html"
-  },
   "web_accessible_resources": [
     {
-      "resources": ["libs/chart.js", "images/smeter.png", "images/MostlyPositive.png", "images/Positive.png", "images/Neutral.png", "images/Negative.png", "images/MostlyNegative.png", "images/Unknown.png"],
-      "matches": ["*://*.youtube.com/*"]
+      "resources": [
+        "images/*",
+        "libs/*",
+        "auth.html"
+      ],
+      "matches": ["https://*.youtube.com/*"]
     }
   ],
-  "background": {
-    "service_worker": "background.js"
+  "action": { /*
+    "default_icon": {
+      "16": "images/icon16.png",
+      "48": "images/icon48.png",
+      "128": "images/icon128.png"
+    }, */
+    "default_title": "YouTube Comment Analyzer"
   }
 }

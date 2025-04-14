@@ -18,12 +18,17 @@ function loadChartJS(callback) {
 let comments_data = [100, 100, 0, 0]; // default data
 
 async function fetchCommentAnalysis(videoId) {
-  
   try {
-    const token = localStorage.getItem("authToken");
+    // Get token from Chrome storage
+    const result = await new Promise(resolve => 
+      chrome.storage.local.get(['authToken'], resolve)
+    );
+    const token = result.authToken;
+    
     if (!token) {
       throw new Error("User is not authenticated. Please log in first.");
     }
+    
     const response = await fetch("https://ser517-scrumbros.onrender.com/analyze", {
         method: "POST",
         headers: {
@@ -51,6 +56,77 @@ async function fetchCommentAnalysis(videoId) {
 function getVideoId() {
   const urlParams = new URLSearchParams(window.location.search);
   return urlParams.get("v");
+}
+
+// Check if user is logged in
+function isUserLoggedIn(callback) {
+  chrome.storage.local.get(['authToken'], function(result) {
+    const isLoggedIn = !!result.authToken;
+    callback(isLoggedIn);
+  });
+}
+
+// Opens the auth page in a new tab
+function openAuthPage() {
+  chrome.runtime.sendMessage({ action: "openAuthPage" });
+}
+
+// Show login prompt instead of analysis
+function addLoginPrompt() {
+  if (document.querySelector('.yt-comment-analyzer-container')) {
+    return;
+  }
+  
+  const commentsSection = document.querySelector('#comments');
+  if (!commentsSection) {
+    setTimeout(addLoginPrompt, 1000);
+    return;
+  }
+
+  const headerDiv = document.createElement('div');
+  headerDiv.className = 'yt-comment-analyzer-header';
+
+  const headerText = document.createElement('span');
+  headerText.textContent = "Analysis Scoop";
+  headerText.className = 'yt-comment-analyzer-headerText';
+
+  const icon = document.createElement('img');
+  icon.src = chrome.runtime.getURL("images/smeter.png");
+  icon.style.width = "24px";
+  icon.style.height = "24px";
+
+  const extraText = document.createElement('span');
+  extraText.textContent = "Your Comments, Our Insights!";
+  extraText.className = 'yt-comment-analyzer-extraText';
+
+  headerDiv.appendChild(headerText);
+  headerDiv.appendChild(icon);
+  headerDiv.appendChild(extraText);
+
+  const containerDiv = document.createElement('div');
+  containerDiv.className = 'yt-comment-analyzer-container';
+  containerDiv.style.flexDirection = "column";
+  containerDiv.style.alignItems = "center";
+  containerDiv.style.justifyContent = "center";
+  containerDiv.style.padding = "40px 20px";
+
+  const loginText = document.createElement('p');
+  loginText.textContent = "Please sign in to access comment analysis features";
+  loginText.style.color = "#f1f1f1";
+  loginText.style.fontSize = "16px";
+  loginText.style.textAlign = "center";
+  loginText.style.marginBottom = "20px";
+
+  const loginBtn = document.createElement('button');
+  loginBtn.textContent = "Sign In / Sign Up";
+  loginBtn.className = 'yt-comment-analyzer-login-btn';
+  loginBtn.addEventListener('click', openAuthPage);
+
+  containerDiv.appendChild(loginText);
+  containerDiv.appendChild(loginBtn);
+
+  commentsSection.insertBefore(headerDiv, commentsSection.firstChild);
+  commentsSection.insertBefore(containerDiv, commentsSection.firstChild.nextSibling);
 }
 
 async function addAnalyzerContainer() {
@@ -272,19 +348,57 @@ function renderChart() {
 
 function waitForYouTubeUI() {
   if (document.querySelector('#comments')) {
-    addAnalyzerContainer();
+    isUserLoggedIn(function(loggedIn) {
+      if (loggedIn) {
+        addAnalyzerContainer();
+      } else {
+        addLoginPrompt();
+      }
+    });
   } else {
     setTimeout(waitForYouTubeUI, 1000);
   }
 }
 
+// Listen for changes in Chrome storage
+function listenForAuthChanges() {
+  chrome.storage.onChanged.addListener(function(changes, namespace) {
+    if (namespace === 'local' && changes.authToken) {
+      // Auth token has changed
+      const container = document.querySelector('.yt-comment-analyzer-container');
+      if (container) {
+        container.remove();
+      }
+      const header = document.querySelector('.yt-comment-analyzer-header');
+      if (header) {
+        header.remove();
+      }
+      
+      if (changes.authToken.newValue) {
+        // User just logged in
+        addAnalyzerContainer();
+      } else {
+        // User logged out
+        addLoginPrompt();
+      }
+    }
+  });
+}
+
 window.addEventListener('load', function() {
   waitForYouTubeUI();
+  listenForAuthChanges();
 
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       if (mutation.addedNodes.length && !document.querySelector('.yt-comment-analyzer-container')) {
-        addAnalyzerContainer();
+        isUserLoggedIn(function(loggedIn) {
+          if (loggedIn) {
+            addAnalyzerContainer();
+          } else {
+            addLoginPrompt();
+          }
+        });
       }
     }
   });
