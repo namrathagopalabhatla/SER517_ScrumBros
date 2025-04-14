@@ -8,7 +8,7 @@
     "tabs"
   ],
   "host_permissions": [
-    "https://*.youtube.com/*",
+    "https://www.youtube.com/*",
     "https://ser517-scrumbros.onrender.com/*"
   ],
   "background": {
@@ -16,7 +16,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*.youtube.com/*"],
+      "matches": ["https://www.youtube.com/*"],
       "js": ["content.js", "libs/chart.js"],
       "css": ["styles.css", "auth.css"]
     }
@@ -28,7 +28,7 @@
         "libs/*",
         "auth.html"
       ],
-      "matches": ["https://*.youtube.com/*"]
+      "matches": ["https://www.youtube.com/*"]
     }
   ],
   "action": {
