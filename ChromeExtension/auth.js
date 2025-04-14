@@ -6,6 +6,7 @@ const nameFields = document.getElementById('name-fields');
 const resetToken = document.getElementById('reset-token');
 const submitBtn = document.getElementById('submit-btn');
 const messageDiv = document.getElementById('auth-message');
+const oldPass = document.getElementById('old-password');
 
 function switchMode(newMode) {
   mode = newMode;
@@ -22,6 +23,7 @@ function switchMode(newMode) {
   // Update display of fields
   nameFields.style.display = mode === 'signup' ? 'flex' : 'none';
   resetToken.style.display = mode === 'reset' ? 'block' : 'none';
+  oldPass.style.display = (mode === 'forgot') || (mode === 'reset') ? 'none' : 'block';
   
   // Update submit button text
   submitBtn.textContent = {
@@ -342,11 +344,6 @@ function updateLinkVisibility(currentMode) {
   const forgotLink = document.getElementById("link-forgot");
   const resetLink = document.getElementById("link-reset");
   
-  signupLink.style.display = "inline-block";
-  loginLink.style.display = "inline-block";
-  forgotLink.style.display = "inline-block";
-  resetLink.style.display = "inline-block";
-  
   signupLink.classList.remove('active');
   loginLink.classList.remove('active');
   forgotLink.classList.remove('active');
@@ -354,20 +351,16 @@ function updateLinkVisibility(currentMode) {
   
   switch(currentMode) {
     case "signup":
-      signupLink.style.display = "none";
-      loginLink.classList.add('active');
-      break;
-    case "login":
-      loginLink.style.display = "none";
       signupLink.classList.add('active');
       break;
-    case "forgot":
-      forgotLink.style.display = "none";
+    case "login":
       loginLink.classList.add('active');
       break;
+    case "forgot":
+      forgotLink.classList.add('active');
+      break;
     case "reset":
-      resetLink.style.display = "none";
-      loginLink.classList.add('active');
+      resetLink.classList.add('active');
       break;
   }
 }

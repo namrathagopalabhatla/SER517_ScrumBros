@@ -101,17 +101,22 @@ button:hover {
   padding: 8px 12px;
   border-radius: 6px;
   font-size: 14px;
+  border: 1px solid #3f3f3f;
+  text-align: center;
+  min-width: 90px;
 }
 
 .toggle-links span:hover {
   color: #ffffff;
   background-color: rgba(255, 0, 0, 0.1);
+  border-color: rgba(255, 0, 0, 0.5);
 }
 
 .toggle-links span.active {
   color: white;
-  background-color: rgba(255, 0, 0, 0.7);
+  background-color: #ff0000;
   font-weight: bold;
+  border-color: #ff0000;
 }
 
 .success-message {
