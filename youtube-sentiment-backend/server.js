@@ -27,6 +27,31 @@ app.options('/analyze', (req, res) => {
     res.sendStatus(200);
 });
 
+app.options('/register', (req, res) => {
+  res.set(corsOptions);
+  res.sendStatus(200);
+});
+
+app.options('/verify-email', (req, res) => {
+  res.set(corsOptions);
+  res.sendStatus(200);
+});
+
+app.options('/login', (req, res) => {
+  res.set(corsOptions);
+  res.sendStatus(200);
+});
+
+app.options('/forgot-password', (req, res) => {
+  res.set(corsOptions);
+  res.sendStatus(200);
+});
+
+app.options('/reset-password', (req, res) => {
+  res.set(corsOptions);
+  res.sendStatus(200);
+});
+
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "https://www.youtube.com");
     res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
