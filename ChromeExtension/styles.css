@@ -5,6 +5,7 @@
   color: #f1f1f1;
   font-family: Arial, sans-serif;
   gap: 10px;
+  /* justify-content: space-between; */
 }
 
 .yt-comment-analyzer-headerText {
@@ -17,6 +18,25 @@
   font-size: 14px;
   font-style: italic;
   white-space: nowrap;
+}
+
+.yt-comment-analyzer-account {
+  margin-left: auto;
+}
+
+.yt-comment-analyzer-account-btn {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.yt-comment-analyzer-account-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
 }
 
 .yt-comment-analyzer-container {
@@ -149,7 +169,7 @@
   100% { transform: rotate(360deg); }
 }
 
-/* New styles for login button */
+/* Login button for the analyzer UI on YouTube */
 .yt-comment-analyzer-login-btn {
   background-color: #ff0000;
   color: white;
@@ -160,6 +180,7 @@
   font-weight: bold;
   cursor: pointer;
   transition: background-color 0.2s;
+  margin-top: 10px;
 }
 
 .yt-comment-analyzer-login-btn:hover {

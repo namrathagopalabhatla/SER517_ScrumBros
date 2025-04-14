@@ -1,6 +1,4 @@
 chrome.runtime.onInstalled.addListener(() => {
-    console.log("YouTube Comment Analyzer Extension Installed");
-    
     // Check if user already has a token
     chrome.storage.local.get(['authToken'], function(result) {
         if (!result.authToken) {

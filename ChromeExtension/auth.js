@@ -10,6 +10,7 @@ const messageDiv = document.getElementById('auth-message');
 function switchMode(newMode) {
   mode = newMode;
   messageDiv.textContent = '';
+  messageDiv.style.backgroundColor = '';
 
   authTitle.textContent = {
     signup: 'Sign Up',
@@ -19,7 +20,7 @@ function switchMode(newMode) {
   }[mode];
 
   // Update display of fields
-  nameFields.style.display = mode === 'signup' ? 'block' : 'none';
+  nameFields.style.display = mode === 'signup' ? 'flex' : 'none';
   resetToken.style.display = mode === 'reset' ? 'block' : 'none';
   
   // Update submit button text
@@ -70,6 +71,7 @@ form.addEventListener('submit', async (e) => {
     isValid = false;
     messageDiv.textContent = 'Email is required';
     messageDiv.style.color = 'red';
+    messageDiv.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
     return;
   }
   values.email = emailInput.value.trim();
@@ -79,6 +81,7 @@ form.addEventListener('submit', async (e) => {
     isValid = false;
     messageDiv.textContent = 'Password is required';
     messageDiv.style.color = 'red';
+    messageDiv.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
     return;
   }
   
@@ -92,12 +95,14 @@ form.addEventListener('submit', async (e) => {
       isValid = false;
       messageDiv.textContent = 'First name is required';
       messageDiv.style.color = 'red';
+      messageDiv.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
       return;
     }
     if (!lastNameInput.value.trim()) {
       isValid = false;
       messageDiv.textContent = 'Last name is required';
       messageDiv.style.color = 'red';
+      messageDiv.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
       return;
     }
     values.firstName = firstNameInput.value.trim();
@@ -110,12 +115,14 @@ form.addEventListener('submit', async (e) => {
       isValid = false;
       messageDiv.textContent = 'Reset token is required';
       messageDiv.style.color = 'red';
+      messageDiv.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
       return;
     }
     if (!newPasswordInput.value) {
       isValid = false;
       messageDiv.textContent = 'New password is required';
       messageDiv.style.color = 'red';
+      messageDiv.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
       return;
     }
     values.token = tokenInput.value.trim();
@@ -124,6 +131,9 @@ form.addEventListener('submit', async (e) => {
   
   // If validation fails, don't proceed
   if (!isValid) return;
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Processing...';
 
   let url = '';
   let payload = {};
@@ -166,8 +176,18 @@ form.addEventListener('submit', async (e) => {
     });
     const data = await res.json();
 
+    // Reset button state
+    submitBtn.disabled = false;
+    submitBtn.textContent = {
+      signup: 'Register',
+      login: 'Login',
+      forgot: 'Send Reset Link',
+      reset: 'Reset Password'
+    }[mode];
+
     if (res.ok) {
       messageDiv.style.color = 'green';
+      messageDiv.style.backgroundColor = 'rgba(0, 255, 0, 0.1)';
       messageDiv.textContent = data.message || 'Success';
       
       if (mode === 'login') {
@@ -211,69 +231,143 @@ form.addEventListener('submit', async (e) => {
         // Create a verification message
         messageDiv.textContent = 'Registration successful! Please check your email to verify your account, then come back to log in.';
       }
+
+      if (mode === 'forgot') {
+        emailInput.value = '';
+      }
     } else {
       messageDiv.style.color = 'red';
+      messageDiv.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
       messageDiv.textContent = data.error || 'Something went wrong.';
     }
   } catch (err) {
+    submitBtn.disabled = false;
+    submitBtn.textContent = {
+      signup: 'Register',
+      login: 'Login',
+      forgot: 'Send Reset Link',
+      reset: 'Reset Password'
+    }[mode];
+    
     messageDiv.style.color = 'red';
-    messageDiv.textContent = 'Network error';
+    messageDiv.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
+    messageDiv.textContent = 'Network error - please try again';
     console.error(err);
   }
 });
 
 // Default mode on load
 switchMode('signup');
+
 document.addEventListener('DOMContentLoaded', () => {
-  // Check if user already has a token in Chrome storage
   chrome.storage.local.get(['authToken'], function(result) {
     const token = result.authToken;
     if (token) {
-    // Already logged in - show a message
-    const container = document.querySelector('.auth-container');
-    container.innerHTML = '';
-    
-    const alreadyLoggedIn = document.createElement('div');
-    alreadyLoggedIn.className = 'success-message';
-    
-    const loggedInText = document.createElement('p');
-    loggedInText.textContent = 'You are already logged in!';
-    
-    const logoutButton = document.createElement('button');
-    logoutButton.textContent = 'Log Out';
-    logoutButton.className = 'logout-button';
-    logoutButton.addEventListener('click', function() {
-      chrome.storage.local.remove('authToken', function() {
-        location.reload();
+      const container = document.querySelector('.auth-container');
+      container.innerHTML = '';
+      
+      const alreadyLoggedIn = document.createElement('div');
+      alreadyLoggedIn.className = 'success-message';
+      
+      const loggedInText = document.createElement('p');
+      loggedInText.textContent = 'You are currently logged in to the YouTube Comment Analyzer.';
+      
+      const logoutButton = document.createElement('button');
+      logoutButton.textContent = 'Log Out';
+      logoutButton.className = 'logout-button';
+      logoutButton.addEventListener('click', function() {
+        chrome.storage.local.remove('authToken', function() {
+          location.reload();
+        });
       });
-    });
-    
-    const returnButton = document.createElement('button');
-    returnButton.textContent = 'Return to YouTube';
-    returnButton.className = 'return-button';
-    returnButton.addEventListener('click', function() {
-      chrome.tabs.query({url: "*://*.youtube.com/*"}, function(tabs) {
-        if (tabs.length > 0) {
-          chrome.tabs.update(tabs[0].id, {active: true});
-          window.close();
-        } else {
-          chrome.tabs.create({url: 'https://www.youtube.com'});
-          window.close();
-        }
+      
+      const returnButton = document.createElement('button');
+      returnButton.textContent = 'Return to YouTube';
+      returnButton.className = 'return-button';
+      returnButton.addEventListener('click', function() {
+        chrome.tabs.query({url: "*://*.youtube.com/*"}, function(tabs) {
+          if (tabs.length > 0) {
+            chrome.tabs.update(tabs[0].id, {active: true});
+            window.close();
+          } else {
+            chrome.tabs.create({url: 'https://www.youtube.com'});
+            window.close();
+          }
+        });
       });
-    });
-    
-    alreadyLoggedIn.appendChild(loggedInText);
-    alreadyLoggedIn.appendChild(logoutButton);
-    alreadyLoggedIn.appendChild(returnButton);
-    
-    container.appendChild(alreadyLoggedIn);
-  } else {
-    // Set up the toggle links for the auth form
-    document.getElementById("link-signup").addEventListener("click", () => switchMode("signup"));
-    document.getElementById("link-login").addEventListener("click", () => switchMode("login"));
-    document.getElementById("link-forgot").addEventListener("click", () => switchMode("forgot"));
-    document.getElementById("link-reset").addEventListener("click", () => switchMode("reset"));
-  }
+      
+      alreadyLoggedIn.appendChild(loggedInText);
+      alreadyLoggedIn.appendChild(logoutButton);
+      alreadyLoggedIn.appendChild(returnButton);
+      
+      container.appendChild(alreadyLoggedIn);
+    } else {
+      setupAuthModeToggle();
+    }
   });
 });
+
+function setupAuthModeToggle() {
+  const signupLink = document.getElementById("link-signup");
+  const loginLink = document.getElementById("link-login");
+  const forgotLink = document.getElementById("link-forgot");
+  const resetLink = document.getElementById("link-reset");
+  
+  updateLinkVisibility(mode);
+  
+  signupLink.addEventListener("click", () => {
+    switchMode("signup");
+    updateLinkVisibility("signup");
+  });
+  
+  loginLink.addEventListener("click", () => {
+    switchMode("login");
+    updateLinkVisibility("login");
+  });
+  
+  forgotLink.addEventListener("click", () => {
+    switchMode("forgot");
+    updateLinkVisibility("forgot");
+  });
+  
+  resetLink.addEventListener("click", () => {
+    switchMode("reset");
+    updateLinkVisibility("reset");
+  });
+}
+
+function updateLinkVisibility(currentMode) {
+  const signupLink = document.getElementById("link-signup");
+  const loginLink = document.getElementById("link-login");
+  const forgotLink = document.getElementById("link-forgot");
+  const resetLink = document.getElementById("link-reset");
+  
+  signupLink.style.display = "inline-block";
+  loginLink.style.display = "inline-block";
+  forgotLink.style.display = "inline-block";
+  resetLink.style.display = "inline-block";
+  
+  signupLink.classList.remove('active');
+  loginLink.classList.remove('active');
+  forgotLink.classList.remove('active');
+  resetLink.classList.remove('active');
+  
+  switch(currentMode) {
+    case "signup":
+      signupLink.style.display = "none";
+      loginLink.classList.add('active');
+      break;
+    case "login":
+      loginLink.style.display = "none";
+      signupLink.classList.add('active');
+      break;
+    case "forgot":
+      forgotLink.style.display = "none";
+      loginLink.classList.add('active');
+      break;
+    case "reset":
+      resetLink.style.display = "none";
+      loginLink.classList.add('active');
+      break;
+  }
+}

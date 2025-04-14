@@ -158,10 +158,21 @@ async function addAnalyzerContainer() {
   const extraText = document.createElement('span');
   extraText.textContent = textData[1];
   extraText.className = 'yt-comment-analyzer-extraText';
+  
+  const accountContainer = document.createElement('div');
+  accountContainer.className = 'yt-comment-analyzer-account';
+  
+  const accountButton = document.createElement('button');
+  accountButton.className = 'yt-comment-analyzer-account-btn';
+  accountButton.textContent = 'Account';
+  accountButton.addEventListener('click', openAuthPage);
+
+  accountContainer.appendChild(accountButton);
 
   headerDiv.appendChild(headerText);
   headerDiv.appendChild(icon);
   headerDiv.appendChild(extraText);
+  headerDiv.appendChild(accountContainer);
 
   const containerDiv = document.createElement('div');
   containerDiv.className = 'yt-comment-analyzer-container';

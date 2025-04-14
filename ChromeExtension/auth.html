@@ -2,13 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>ScrumBros | Auth</title>
+  <title>YouTube Comment Analyzer | Auth</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="auth.css" />
 </head>
 <body>
   <div class="auth-container">
+    <div class="youtube-branding">
+      <img src="images/smeter.png" alt="YouTube Comment Analyzer" />
+      <div class="title"><span class="comment-analyzer">Comment Analyzer</span></div>
+    </div>
+    
     <h2 id="auth-title">Sign Up</h2>
+    
     <form id="auth-form" novalidate>
       <div id="name-fields">
         <input type="text" name="firstName" placeholder="First Name" />
@@ -27,11 +33,11 @@
     </form>
 
     <div class="toggle-links">
-        <span id="link-signup">Sign Up</span> |
-        <span id="link-login">Login</span> |
-        <span id="link-forgot">Forgot Password</span> |
-        <span id="link-reset">Reset Password</span>
-    </div>      
+      <span id="link-signup">Sign Up</span>
+      <span id="link-login">Login</span>
+      <span id="link-forgot">Forgot Password</span>
+      <span id="link-reset">Reset Password</span>
+    </div>
   </div>
 
   <script src="auth.js"></script>
