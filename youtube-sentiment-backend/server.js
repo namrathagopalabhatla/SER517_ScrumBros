@@ -441,16 +441,15 @@ app.post('/register', async (req, res) => {
       if (!user) return res.status(404).json({ error: 'User not found.' });
   
       const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '15m' });
-      const resetLink = `https://ser517-scrumbros.onrender.com/reset-password?token=${token}`;
   
       await transporter.sendMail({
         from: `Support <${process.env.EMAIL_USER}>`,
         to: email,
-        subject: 'Reset Your Password',
-        html: `<p>Click the link to reset your password:</p><a href="${resetLink}">${resetLink}</a>`
+        subject: 'Your Password Reset Token',
+        html: `<p>Use the following token to reset your password:</p><p><b>${token}</b></p>`
       });
   
-      res.json({ message: 'Password reset email sent.' });
+      res.json({ message: 'Password reset token sent to email.' });
     } catch (err) {
       console.error('Forgot password error:', err);
       res.status(500).json({ error: 'Server error during password reset request.' });
