@@ -105,7 +105,7 @@ async function fetchYouTubeComments(videoId) {
     }
 
     console.log(`Collected ${comments.length} top-level comments.`);
-    return comments.slice(0, maxToCollect); 
+    return comments.slice(0, 500); 
 }
 
 
@@ -269,6 +269,26 @@ function authenticateToken(req, res, next) {
     });
 }
 
+async function fetchTotalCommentCount(videoId) {
+    try {
+        const response = await axios.get(
+            'https://www.googleapis.com/youtube/v3/videos',
+            {
+                params: {
+                    part: 'statistics',
+                    id: videoId,
+                    key: YOUTUBE_API_KEY
+                }
+            }
+        );
+
+        const stats = response.data.items?.[0]?.statistics;
+        return stats ? parseInt(stats.commentCount) || 0 : 0;
+    } catch (error) {
+        console.error("Error fetching total comment count:", error.message);
+        return 0; // fallback if API fails
+    }
+}
 
 
 
@@ -298,7 +318,8 @@ app.post('/analyze', authenticateToken, async (req, res) => {
     if (!analysis) return res.status(500).json({ error: "Sentiment analysis failed" });
 
     // Step 3: Directly use AI's structured response
-    const { summary, most_helpful_comments, verdict, real_total_comments, comments_data } = analysis;
+    const { summary, most_helpful_comments, verdict, comments_data } = analysis;
+    const real_total_comments = await fetchTotalCommentCount(videoId);
 
     // Step 4: Save new analysis to Supabase
     const { error: saveError } = await supabase
@@ -322,8 +343,6 @@ app.post('/analyze', authenticateToken, async (req, res) => {
     // Step 5: Return the structured AI-generated response
     res.json({ summary, most_helpful_comments, verdict, real_total_comments, comments_data });
 });
-
-
 
 
 app.post('/register', async (req, res) => {
