@@ -1,41 +1,86 @@
+let comments_data = [100, 100, 0, 0]; // default data
+let currentVideoId = null;
+let authToken = null;
+let currentInterval = null;
+let isExtensionActive = true;
+
+function saveCurrentVideoId(videoId) {
+  try {
+    sessionStorage.setItem('yt_analyzer_current_video', videoId);
+  } catch (e) {
+    console.log('Failed to save to sessionStorage:', e);
+  }
+}
+
+function getSavedVideoId() {
+  try {
+    return sessionStorage.getItem('yt_analyzer_current_video');
+  } catch (e) {
+    console.log('Failed to read from sessionStorage:', e);
+    return null;
+  }
+}
+
+(function loadAuthToken() {
+  try {
+    chrome.storage.local.get(['authToken'], function(result) {
+      if (result && result.authToken) {
+        authToken = result.authToken;
+        console.log('Auth token loaded successfully');
+      }
+    });
+  } catch (e) {
+    console.log('Failed to load auth token:', e);
+  }
+})();
+
 function loadChartJS(callback) {
   if (window.Chart) {
     callback();
     return;
   }
-  const script = document.createElement("script");
-  script.src = chrome.runtime.getURL("libs/chart.js");
-  script.onload = function() {
-    console.log("Chart.js loaded successfully.");
-    callback();
-  };
-  script.onerror = function() {
-    console.error("Failed to load Chart.js:", chrome.runtime.getURL("libs/chart.js"));
-  };
-  document.head.appendChild(script);
+  
+  try {
+    const script = document.createElement("script");
+    script.src = chrome.runtime.getURL("libs/chart.js");
+    script.onload = function() {
+      console.log("Chart.js loaded successfully.");
+      callback();
+    };
+    script.onerror = function() {
+      console.error("Failed to load Chart.js");
+      callback(new Error("Failed to load Chart.js"));
+    };
+    document.head.appendChild(script);
+  } catch (e) {
+    console.error("Error loading Chart.js:", e);
+    callback(e);
+  }
 }
 
-let comments_data = [100, 100, 0, 0]; // default data
+function getVideoId() {
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get("v");
+}
 
 async function fetchCommentAnalysis(videoId) {
+  if (!authToken) {
+    return {
+      summary: "Please log in to view analysis", 
+      verdict: 0, 
+      totalComments: "No comments available", 
+      mostHelpfulComments: []
+    };
+  }
+  
   try {
-    // Get token from Chrome storage
-    const result = await new Promise(resolve => 
-      chrome.storage.local.get(['authToken'], resolve)
-    );
-    const token = result.authToken;
-    
-    if (!token) {
-      throw new Error("User is not authenticated. Please log in first.");
-    }
-    
     const response = await fetch("https://ser517-scrumbros.onrender.com/analyze", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({ videoId })
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${authToken}`
+      },
+      body: JSON.stringify({ videoId })
     });
 
     if (!response.ok) {
@@ -46,32 +91,50 @@ async function fetchCommentAnalysis(videoId) {
     console.log("Analysis data:", data);
 
     comments_data = data.comments_data.slice(1) || comments_data;
-    return {summary: data.summary || "No analysis available", verdict: data.verdict !== undefined && data.verdict !== null ? data.verdict : "No verdict available", totalComments: data.real_total_comments || "No comments available", mostHelpfulComments: data.most_helpful_comments || []};
+    return {
+      summary: data.summary || "No analysis available", 
+      verdict: data.verdict !== undefined && data.verdict !== null ? data.verdict : 0, 
+      totalComments: data.real_total_comments || "No comments available", 
+      mostHelpfulComments: data.most_helpful_comments || []
+    };
   } catch (error) {
     console.error("Error fetching analysis:", error);
-    return {summary: "Error fetching analysis", verdict: "Error fetching verdict", totalComments: "Error fetching comments", mostHelpfulComments: []};
+    return {
+      summary: "Error fetching analysis", 
+      verdict: 0, 
+      totalComments: "Error fetching comments", 
+      mostHelpfulComments: []
+    };
   }
 }
 
-function getVideoId() {
-  const urlParams = new URLSearchParams(window.location.search);
-  return urlParams.get("v");
-}
-
-// Check if user is logged in
-function isUserLoggedIn(callback) {
-  chrome.storage.local.get(['authToken'], function(result) {
-    const isLoggedIn = !!result.authToken;
-    callback(isLoggedIn);
-  });
-}
-
-// Opens the auth page in a new tab
 function openAuthPage() {
-  chrome.runtime.sendMessage({ action: "openAuthPage" });
+  try {
+    chrome.runtime.sendMessage({ action: "openAuthPage" });
+  } catch (e) {
+    console.error("Failed to send message to open auth page:", e);
+    try {
+      // Fallback: try to open auth page directly
+      window.open(chrome.runtime.getURL('auth.html'), '_blank');
+    } catch (e2) {
+      console.error("Also failed to open auth page directly:", e2);
+      // Last resort: tell user to click the extension icon
+      alert("Please click on the YouTube Comment Analyzer extension icon to log in");
+    }
+  }
 }
 
-// Show login prompt instead of analysis
+function removeExistingAnalyzer() {
+  const container = document.querySelector('.yt-comment-analyzer-container');
+  if (container) {
+    container.remove();
+  }
+  const header = document.querySelector('.yt-comment-analyzer-header');
+  if (header) {
+    header.remove();
+  }
+}
+
 function addLoginPrompt() {
   if (document.querySelector('.yt-comment-analyzer-container')) {
     return;
@@ -79,8 +142,7 @@ function addLoginPrompt() {
   
   const commentsSection = document.querySelector('#comments');
   if (!commentsSection) {
-    setTimeout(addLoginPrompt, 1000);
-    return;
+    return false; // Signal UI couldn't be added
   }
 
   const headerDiv = document.createElement('div');
@@ -127,20 +189,20 @@ function addLoginPrompt() {
 
   commentsSection.insertBefore(headerDiv, commentsSection.firstChild);
   commentsSection.insertBefore(containerDiv, commentsSection.firstChild.nextSibling);
+  
+  return true; // Signal UI was added successfully
 }
 
+// Main function to render the analyzer UI
 async function addAnalyzerContainer() {
-  
   const textData = ["Analysis Scoop", "Your Comments, Our Insights!"];
 
-  if (document.querySelector('.yt-comment-analyzer-container')) {
-    return;
-  }
+  // Remove existing container if it's already there
+  removeExistingAnalyzer();
   
   const commentsSection = document.querySelector('#comments');
   if (!commentsSection) {
-    setTimeout(addAnalyzerContainer, 1000);
-    return;
+    return false; // Signal UI couldn't be added
   }
 
   const headerDiv = document.createElement('div');
@@ -244,54 +306,106 @@ async function addAnalyzerContainer() {
 
   const videoId = getVideoId();
   if (videoId) {
-    loadChartJS(async function() {
-      loadingDiv.style.display = "flex";
-      const analysis = await fetchCommentAnalysis(videoId);
-      loadingDiv.style.display = "none";
-      summaryDiv.textContent = `${analysis.summary}`;
-      total_Comments.textContent = `(${analysis.totalComments} Comments)`;
-      console.log("Verdict Type:", typeof analysis.verdict, "Verdict:", analysis.verdict);
-      switch (analysis.verdict) {
-        case -2:
-          verdictText.textContent = "Mostly Negative";
-          verdictIcon.src = chrome.runtime.getURL("images/MostlyNegative.png");
-          break;
-        case -1:
-          verdictText.textContent = "Negative";
-          verdictIcon.src = chrome.runtime.getURL("images/Negative.png");
-          break;
-        case 0:
-          verdictText.textContent = "Neutral";
-          verdictIcon.src = chrome.runtime.getURL("images/Neutral.png");
-          break;
-        case 1:
-          verdictText.textContent = "Positive";
-          verdictIcon.src = chrome.runtime.getURL("images/Positive.png");
-          break;
-        case 2:
-          verdictText.textContent = "Mostly Positive";
-          verdictIcon.src = chrome.runtime.getURL("images/MostlyPositive.png");
-          break;
-        default:
-          console.warn("Unexpected verdict value:", `${analysis.verdict}`);
-          verdictText.textContent = "Unknown";
-          verdictIcon.src = chrome.runtime.getURL("images/Unknown.png");
-          break;
+    currentVideoId = videoId;
+    saveCurrentVideoId(videoId);
+    
+    const loadChartAndAnalyze = async () => {
+      try {
+        loadChartJS(async function(err) {
+          if (err) {
+            loadingDiv.style.display = "none";
+            summaryDiv.textContent = "Error loading chart library. Please refresh the page.";
+            return;
+          }
+          
+          loadingDiv.style.display = "flex";
+          const analysis = await fetchCommentAnalysis(videoId);
+          loadingDiv.style.display = "none";
+          
+          summaryDiv.textContent = `${analysis.summary}`;
+          total_Comments.textContent = `(${analysis.totalComments} Comments)`;
+          
+          console.log("Verdict Type:", typeof analysis.verdict, "Verdict:", analysis.verdict);
+          switch (analysis.verdict) {
+            case -2:
+              verdictText.textContent = "Mostly Negative";
+              try {
+                verdictIcon.src = chrome.runtime.getURL("images/MostlyNegative.png");
+              } catch (e) {
+                console.log("Could not load verdict icon", e);
+              }
+              break;
+            case -1:
+              verdictText.textContent = "Negative";
+              try {
+                verdictIcon.src = chrome.runtime.getURL("images/Negative.png");
+              } catch (e) {
+                console.log("Could not load verdict icon", e);
+              }
+              break;
+            case 0:
+              verdictText.textContent = "Neutral";
+              try {
+                verdictIcon.src = chrome.runtime.getURL("images/Neutral.png");
+              } catch (e) {
+                console.log("Could not load verdict icon", e);
+              }
+              break;
+            case 1:
+              verdictText.textContent = "Positive";
+              try {
+                verdictIcon.src = chrome.runtime.getURL("images/Positive.png");
+              } catch (e) {
+                console.log("Could not load verdict icon", e);
+              }
+              break;
+            case 2:
+              verdictText.textContent = "Mostly Positive";
+              try {
+                verdictIcon.src = chrome.runtime.getURL("images/MostlyPositive.png");
+              } catch (e) {
+                console.log("Could not load verdict icon", e);
+              }
+              break;
+            default:
+              console.warn("Unexpected verdict value:", `${analysis.verdict}`);
+              verdictText.textContent = "Unknown";
+              try {
+                verdictIcon.src = chrome.runtime.getURL("images/Unknown.png");
+              } catch (e) {
+                console.log("Could not load verdict icon", e);
+              }
+              break;
+          }
+  
+          helpfulCommentsDiv.innerHTML = '';
+          
+          analysis.mostHelpfulComments.forEach(comment => {
+            const commentElement = document.createElement('div');
+            commentElement.textContent = comment;
+            commentElement.className = 'yt-comment-analyzer-helpful-comments';
+            
+            helpfulCommentsDiv.appendChild(commentElement);
+          });
+  
+          try {
+            renderChart();
+          } catch (e) {
+            console.error("Error rendering chart:", e);
+          }
+        });
+      } catch (e) {
+        console.error("Error in loadChartAndAnalyze:", e);
+        loadingDiv.style.display = "none";
+        summaryDiv.textContent = "Error loading analysis. Please refresh the page.";
       }
-
-      analysis.mostHelpfulComments.forEach(comment => {
-      const commentElement = document.createElement('div');
-      commentElement.textContent = comment;
-      commentElement.className = 'yt-comment-analyzer-helpful-comments';
-      
-      helpfulCommentsDiv.appendChild(commentElement);
-      });
-
-      renderChart();
-    });
+    };
+    
+    loadChartAndAnalyze();
   } else {
     summaryDiv.textContent = "Could not determine video ID.";
   }
+  return true;
 }
 
 function renderChart() {
@@ -357,62 +471,176 @@ function renderChart() {
   });
 }
 
-function waitForYouTubeUI() {
-  if (document.querySelector('#comments')) {
-    isUserLoggedIn(function(loggedIn) {
-      if (loggedIn) {
-        addAnalyzerContainer();
-      } else {
-        addLoginPrompt();
-      }
-    });
-  } else {
-    setTimeout(waitForYouTubeUI, 1000);
-  }
-}
-
-// Listen for changes in Chrome storage
-function listenForAuthChanges() {
-  chrome.storage.onChanged.addListener(function(changes, namespace) {
-    if (namespace === 'local' && changes.authToken) {
-      // Auth token has changed
-      const container = document.querySelector('.yt-comment-analyzer-container');
-      if (container) {
-        container.remove();
-      }
-      const header = document.querySelector('.yt-comment-analyzer-header');
-      if (header) {
-        header.remove();
-      }
-      
-      if (changes.authToken.newValue) {
-        // User just logged in
-        addAnalyzerContainer();
-      } else {
-        // User logged out
-        addLoginPrompt();
-      }
-    }
-  });
-}
-
-window.addEventListener('load', function() {
-  waitForYouTubeUI();
-  listenForAuthChanges();
-
-  const observer = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      if (mutation.addedNodes.length && !document.querySelector('.yt-comment-analyzer-container')) {
-        isUserLoggedIn(function(loggedIn) {
-          if (loggedIn) {
+function updateUI() {
+  if (!isExtensionActive) return;
+  
+  const videoId = getVideoId();
+  if (!videoId) return;
+  
+  const savedVideoId = getSavedVideoId();
+  
+  if (videoId !== currentVideoId || videoId !== savedVideoId) {
+    console.log(`Video changed from ${currentVideoId} to ${videoId}`);
+    currentVideoId = videoId;
+    saveCurrentVideoId(videoId);
+    
+    if (authToken) {
+      addAnalyzerContainer();
+    } else {
+      try {
+        chrome.storage.local.get(['authToken'], function(result) {
+          if (result && result.authToken) {
+            authToken = result.authToken;
             addAnalyzerContainer();
           } else {
             addLoginPrompt();
           }
         });
+      } catch (e) {
+        console.log("Failed to check auth token:", e);
+        addLoginPrompt();
       }
     }
-  });
+  }
+}
 
-  observer.observe(document.body, { childList: true, subtree: true });
-});
+function setupContinuousChecks() {
+  if (currentInterval) {
+    clearInterval(currentInterval);
+  }
+  
+  currentInterval = setInterval(() => {
+    const commentsSection = document.querySelector('#comments');
+    if (!commentsSection) return;
+    
+    const container = document.querySelector('.yt-comment-analyzer-container');
+    if (!container) {
+      updateUI();
+      return;
+    }
+    
+    const videoId = getVideoId();
+    if (videoId && videoId !== currentVideoId) {
+      updateUI();
+    }
+  }, 1000);
+}
+
+function setupStorageListener() {
+  try {
+    chrome.storage.onChanged.addListener(function(changes, namespace) {
+      if (namespace === 'local' && changes.authToken) {
+        authToken = changes.authToken.newValue;
+        
+        updateUI();
+      }
+    });
+  } catch (e) {
+    console.error("Error setting up storage listener:", e);
+  }
+}
+
+function initExtension() {
+  isExtensionActive = true;
+  
+  const savedId = getSavedVideoId();
+  if (savedId) {
+    currentVideoId = savedId;
+  }
+  
+  try {
+    chrome.storage.local.get(['authToken'], function(result) {
+      if (result && result.authToken) {
+        authToken = result.authToken;
+      }
+      
+      // Initial UI setup
+      updateUI();
+    });
+  } catch (e) {
+    console.log("Failed to get auth token:", e);
+    updateUI();
+  }
+  
+  setupContinuousChecks();
+  
+  setupStorageListener();
+  
+  setupYouTubeNavigation();
+}
+
+function setupYouTubeNavigation() {
+  try {
+    const originalPushState = history.pushState;
+    const originalReplaceState = history.replaceState;
+    
+    history.pushState = function() {
+      originalPushState.apply(this, arguments);
+      setTimeout(updateUI, 1000);
+    };
+    
+    history.replaceState = function() {
+      originalReplaceState.apply(this, arguments);
+      setTimeout(updateUI, 1000);
+    };
+    
+    window.addEventListener('popstate', function() {
+      setTimeout(updateUI, 1000);
+    });
+  } catch (e) {
+    console.error("Error setting up history monitoring:", e);
+  }
+  
+  let lastUrl = location.href;
+  function checkForUrlChange() {
+    if (location.href !== lastUrl) {
+      lastUrl = location.href;
+      setTimeout(updateUI, 1000);
+    }
+    if (isExtensionActive) {
+      requestAnimationFrame(checkForUrlChange);
+    }
+  }
+  checkForUrlChange();
+  
+  try {
+    const observer = new MutationObserver((mutations) => {
+      let shouldUpdate = false;
+      
+      for (const mutation of mutations) {
+        // If comments section is added or changed
+        if (mutation.type === 'childList' && 
+            (mutation.target.id === 'comments' || 
+             [...mutation.addedNodes].some(node => 
+               node.nodeType === 1 && (node.id === 'comments' || node.querySelector('#comments'))
+             ))) {
+          shouldUpdate = true;
+          break;
+        }
+      }
+      
+      if (shouldUpdate) {
+        setTimeout(updateUI, 1000);
+      }
+    });
+    
+    observer.observe(document.body, { 
+      childList: true, 
+      subtree: true 
+    });
+  } catch (e) {
+    console.error("Error setting up mutation observer:", e);
+  }
+}
+
+function deactivateExtension() {
+  isExtensionActive = false;
+  if (currentInterval) {
+    clearInterval(currentInterval);
+  }
+  removeExistingAnalyzer();
+}
+
+window.addEventListener('load', initExtension);
+
+window.addEventListener('unload', deactivateExtension);
