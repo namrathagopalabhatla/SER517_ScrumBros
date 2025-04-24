@@ -294,99 +294,94 @@ async function fetchTotalCommentCount(videoId) {
 
 // API Endpoint to Analyze a Video
 app.post('/analyze', authenticateToken, async (req, res) => {
-    const { videoId, autoRetry = false } = req.body;
+  const { videoId, autoRetry = false } = req.body;
 
-    if (!videoId) return res.status(400).json({ error: "videoId is required" });
-    // Step 1: Check if analysis already exists
-    const { data: existingData, error: fetchError } = await supabase
-        .from('video_sentiment_summary')
-        .select('*')
-        .eq('videoid', videoId)
-        .single();
+  if (!videoId) return res.status(400).json({ error: "videoId is required" });
 
-    if (existingData && !autoRetry) {
-        console.log(`Returning cached result for video: ${videoId}`);
-        return res.json(existingData);
-    }
+  // Step 1: Check if analysis already exists
+  const { data: existingData, error: fetchError } = await supabase
+    .from('video_sentiment_summary')
+    .select('*')
+    .eq('videoid', videoId)
+    .single();
 
-    // Step 2: Fetch comments and analyze sentiment
-    console.log(`Fetching comments for video: ${videoId}`);
-    const comments = await fetchYouTubeComments(videoId);
+  // Return cached result if not forcing re-analysis
+  if (existingData && !autoRetry) {
+    console.log(`Returning cached result for video: ${videoId}`);
+    return res.json(existingData);
+  }
 
-    console.log(`Analyzing ${comments.length} comments...`);
-    const analysis = await analyzeSentiment(comments);
-    if (!analysis) return res.status(500).json({ error: "Sentiment analysis failed" });
+  // Step 2: Fetch comments and analyze sentiment
+  console.log(`Fetching comments for video: ${videoId}`);
+  const comments = await fetchYouTubeComments(videoId);
 
-    // Step 3: Directly use AI's structured response
-    const { summary, most_helpful_comments, verdict, comments_data } = analysis;
-    const real_total_comments = await fetchTotalCommentCount(videoId);
+  console.log(`Analyzing ${comments.length} comments...`);
+  const analysis = await analyzeSentiment(comments);
+  if (!analysis) return res.status(500).json({ error: "Sentiment analysis failed" });
 
-    // Step 4: Save new analysis to Supabase
-    const { error: saveError } = await supabase
-        .from('video_sentiment_summary')
-        .upsert([
-            {
-                videoid: videoId,
-                summary,
-                most_helpful_comments,
-                verdict,
-                real_total_comments,
-                comments_data
-            }
-        ], { onConflict: 'videoid' });
+  // Step 3: Extract results
+  const { summary, most_helpful_comments, verdict, comments_data } = analysis;
+  const real_total_comments = await fetchTotalCommentCount(videoId);
+  const now = new Date().toISOString();
 
-    if (saveError) {
-        console.error("Error saving to Supabase:", saveError.message);
-        return res.status(500).json({ error: "Failed to save analysis result." });
-    }
+  let upsertedData;
+  let saveError;
 
-    // Step 5: Return the structured AI-generated response
-    res.json({ summary, most_helpful_comments, verdict, real_total_comments, comments_data });
+  if (existingData) {
+    // Update existing row
+    const { data, error } = await supabase
+      .from('video_sentiment_summary')
+      .update({
+        summary,
+        most_helpful_comments,
+        verdict,
+        real_total_comments,
+        comments_data,
+        created_at: now  // Refresh timestamp on retry
+      })
+      .eq('videoid', videoId)
+      .select('summary, most_helpful_comments, verdict, real_total_comments, comments_data, created_at')
+      .single();
+
+    upsertedData = data;
+    saveError = error;
+
+  } else {
+    // Insert new record
+    const { data, error } = await supabase
+      .from('video_sentiment_summary')
+      .insert([{
+        videoid: videoId,
+        summary,
+        most_helpful_comments,
+        verdict,
+        real_total_comments,
+        comments_data,
+        created_at: now
+      }])
+      .select('summary, most_helpful_comments, verdict, real_total_comments, comments_data, created_at')
+      .single();
+
+    upsertedData = data;
+    saveError = error;
+  }
+
+  if (saveError) {
+    console.error("Error saving to Supabase:", saveError.message);
+    return res.status(500).json({ error: "Failed to save analysis result." });
+  }
+
+  // Return updated or newly inserted record
+  res.json({
+    summary: upsertedData.summary,
+    most_helpful_comments: upsertedData.most_helpful_comments,
+    verdict: upsertedData.verdict,
+    real_total_comments: upsertedData.real_total_comments,
+    comments_data: upsertedData.comments_data,
+    created_at: upsertedData.created_at
+  });
 });
 
-
-app.post('/register', async (req, res) => {
-    const { firstName, lastName, email, password } = req.body;
-  
-    if (!firstName || !lastName || !email || !password) {
-      return res.status(400).json({ error: 'All fields are required.' });
-    }
-  
-    try {
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', email)
-        .maybeSingle();
-  
-      if (existingUser) {
-        return res.status(400).json({ error: 'User already exists.' });
-      }
-  
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const verificationToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '30m' });
-  
-      const { error: insertError } = await supabase.from('users').insert([
-        { email, password: hashedPassword, first_name: firstName, last_name: lastName, is_verified: false },
-      ]);
-  
-      if (insertError) throw insertError;
-  
-      const verificationLink = `https://ser517-scrumbros.onrender.com/verify-email?token=${verificationToken}`;
-  
-      await transporter.sendMail({
-        from: `Support <${process.env.EMAIL_USER}>`,
-        to: email,
-        subject: 'Verify Your Email',
-        html: `<p>Click the link to verify your email:</p><a href="${verificationLink}">${verificationLink}</a>`
-      });
-  
-      res.status(200).json({ message: 'Registration successful. Please verify your email.' });
-    } catch (err) {
-      console.error('Register error:', err);
-      res.status(500).json({ error: 'Server error during registration.' });
-    }
-  });
   
   
   app.get('/verify-email', async (req, res) => {
