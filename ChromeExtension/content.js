@@ -237,10 +237,11 @@ async function forceReloadAnalysis() {
   if (leftDiv) leftDiv.style.display = "none";
   if (rightDiv) rightDiv.style.display = "none";
   
-  // Disable reload button while loading
+  // Disable reload button and add spinning animation
   const reloadBtn = document.querySelector('.yt-comment-analyzer-reload-btn');
   if (reloadBtn) {
     reloadBtn.disabled = true;
+    reloadBtn.classList.add('spinning');
   }
   
   // Fetch analysis with forceRetry flag
@@ -250,6 +251,19 @@ async function forceReloadAnalysis() {
     // Update the UI directly with the received analysis data
     // Instead of rebuilding the entire UI which would trigger another fetch
     updateUIWithAnalysisData(analysis, loadingDiv, leftDiv, rightDiv);
+    
+    // Remove spinning animation with a slight delay for visual feedback
+    setTimeout(() => {
+      if (reloadBtn) {
+        reloadBtn.classList.remove('spinning');
+        reloadBtn.classList.add('success-pulse');
+        
+        // Remove success animation after a short delay
+        setTimeout(() => {
+          reloadBtn.classList.remove('success-pulse');
+        }, 1000);
+      }
+    }, 300);
   } catch (error) {
     console.error("Force reload failed:", error);
     // Return to normal view
@@ -257,9 +271,16 @@ async function forceReloadAnalysis() {
     if (leftDiv) leftDiv.style.display = "block";
     if (rightDiv) rightDiv.style.display = "block";
     
-    // Re-enable reload button
+    // Remove spinning animation and add error animation
     if (reloadBtn) {
-      reloadBtn.disabled = false;
+      reloadBtn.classList.remove('spinning');
+      reloadBtn.classList.add('error-shake');
+      
+      // Remove error animation after a short delay
+      setTimeout(() => {
+        reloadBtn.classList.remove('error-shake');
+        reloadBtn.disabled = false;
+      }, 500);
     }
     
     isLoading = false;
@@ -279,6 +300,7 @@ function updateUIWithAnalysisData(analysis, loadingDiv, leftDiv, rightDiv) {
     // Update reload button state
     const reloadBtn = document.querySelector('.yt-comment-analyzer-reload-btn');
     if (reloadBtn) {
+      // We're only removing disabled here - animation classes are handled separately
       reloadBtn.disabled = false;
     }
     
@@ -379,6 +401,14 @@ function updateUIWithAnalysisData(analysis, loadingDiv, leftDiv, rightDiv) {
     if (loadingDiv) loadingDiv.style.display = "none";
     if (leftDiv) leftDiv.style.display = "block";
     if (rightDiv) rightDiv.style.display = "block";
+    
+    // Reset reload button animation and state
+    const reloadBtn = document.querySelector('.yt-comment-analyzer-reload-btn');
+    if (reloadBtn) {
+      reloadBtn.classList.remove('spinning');
+      reloadBtn.disabled = false;
+    }
+    
     isLoading = false;
   }
 }
@@ -414,18 +444,28 @@ async function addAnalyzerContainer() {
   const accountContainer = document.createElement('div');
   accountContainer.className = 'yt-comment-analyzer-account';
   
-  // Add Force Reload button
+  // Add Reload icon button
   const reloadButton = document.createElement('button');
   reloadButton.className = 'yt-comment-analyzer-reload-btn';
-  reloadButton.textContent = 'Force Reload';
+  reloadButton.title = "Force Reload Analysis";
+  reloadButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="reload-icon">
+    <path d="M21.5 2v6h-6"></path>
+    <path d="M2.5 12a10 10 0 0 1 17.75-6H21.5"></path>
+    <path d="M2.5 22v-6h6"></path>
+    <path d="M21.5 12a10 10 0 0 1-17.75 6H2.5"></path>
+  </svg>`;
   reloadButton.addEventListener('click', forceReloadAnalysis);
   reloadButton.disabled = isLoading; // Disable if currently loading
   accountContainer.appendChild(reloadButton);
   
-  // Add Account button
+  // Add Profile icon button
   const accountButton = document.createElement('button');
   accountButton.className = 'yt-comment-analyzer-account-btn';
-  accountButton.textContent = 'Account';
+  accountButton.title = "Account Settings";
+  accountButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="profile-icon">
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+    <circle cx="12" cy="7" r="4"></circle>
+  </svg>`;
   accountButton.addEventListener('click', openAuthPage);
   accountContainer.appendChild(accountButton);
 
@@ -630,6 +670,7 @@ function updateUI() {
   const savedVideoId = getSavedVideoId();
   const existingContainer = document.querySelector('.yt-comment-analyzer-container');
   
+  // Determine if we need to update the UI
   const needsUpdate = 
     !existingContainer || // No container exists
     videoId !== currentVideoId || // Video has changed
@@ -638,13 +679,16 @@ function updateUI() {
   if (needsUpdate) {
     console.log(`UI update needed. Current: ${currentVideoId}, New: ${videoId}, Saved: ${savedVideoId}`);
     
+    // Update current video ID in memory and storage
     currentVideoId = videoId;
     saveCurrentVideoId(videoId);
     
+    // Add UI with appropriate state
     if (authToken) {
       console.log("User is authenticated, adding analyzer container");
       addAnalyzerContainer();
     } else {
+      // Try to get token one more time before showing login prompt
       try {
         chrome.storage.local.get(['authToken'], function(result) {
           if (result && result.authToken) {
@@ -666,19 +710,24 @@ function updateUI() {
   }
 }
 
+// Setup continuous checks for UI and URL changes
 function setupContinuousChecks() {
+  // Clear any existing interval
   if (currentInterval) {
     clearInterval(currentInterval);
     console.log("Cleared existing check interval");
   }
   
+  // Set up a new interval with staggered checking frequency
   currentInterval = setInterval(() => {
+    // Check for comments section
     const commentsSection = document.querySelector('#comments');
     if (!commentsSection) {
       console.log("Comments section not found during continuous check");
       return;
     }
     
+    // Check for UI elements
     const container = document.querySelector('.yt-comment-analyzer-container');
     if (!container) {
       console.log("Container not found, triggering UI update");
@@ -686,6 +735,7 @@ function setupContinuousChecks() {
       return;
     }
     
+    // Check if video ID has changed
     const videoId = getVideoId();
     if (videoId && videoId !== currentVideoId) {
       console.log(`Video ID changed during continuous check: ${currentVideoId} -> ${videoId}`);
@@ -693,6 +743,7 @@ function setupContinuousChecks() {
     }
   }, 2000); // Check every 2 seconds
   
+  // Add a secondary faster check specifically for page loads/reloads
   setTimeout(() => {
     const checkPageReady = setInterval(() => {
       const commentsSection = document.querySelector('#comments');
@@ -705,18 +756,22 @@ function setupContinuousChecks() {
       }
     }, 500); // Check every 500ms
     
+    // Clear this check after 10 seconds
     setTimeout(() => {
       clearInterval(checkPageReady);
     }, 10000);
   }, 1000);
 }
 
+// Listen for storage changes to update token
 function setupStorageListener() {
   try {
     chrome.storage.onChanged.addListener(function(changes, namespace) {
       if (namespace === 'local' && changes.authToken) {
+        // Auth token has changed
         authToken = changes.authToken.newValue;
         
+        // Re-add UI with updated auth state
         updateUI();
       }
     });
@@ -725,16 +780,21 @@ function setupStorageListener() {
   }
 }
 
+// Handle extension initialization
 function initExtension() {
   console.log("Initializing YouTube Comment Analyzer extension");
+  
+  // Set extension as active
   isExtensionActive = true;
   
+  // Try to load saved video ID
   const savedId = getSavedVideoId();
   if (savedId) {
     currentVideoId = savedId;
     console.log("Loaded saved video ID:", currentVideoId);
   }
   
+  // Try to initialize token
   try {
     chrome.storage.local.get(['authToken'], function(result) {
       if (result && result.authToken) {
@@ -749,23 +809,30 @@ function initExtension() {
     });
   } catch (e) {
     console.log("Failed to get auth token:", e);
+    // Try to update UI anyway
     setTimeout(updateUI, 500);
   }
   
+  // Set up continuous checks
   setupContinuousChecks();
   
+  // Set up storage listener
   setupStorageListener();
   
+  // Set up code to handle YouTube's dynamic navigation
   setupYouTubeNavigation();
   
+  // Add additional reload handler
   window.addEventListener('DOMContentLoaded', function() {
     console.log("DOM content loaded - checking for comments section");
+    // Use a staggered approach to try to find and initialize the UI
     setTimeout(checkForCommentsSection, 1000);
     setTimeout(checkForCommentsSection, 3000);
     setTimeout(checkForCommentsSection, 5000);
   });
 }
 
+// Check specifically for comments section and add UI if found
 function checkForCommentsSection() {
   const commentsSection = document.querySelector('#comments');
   if (commentsSection) {
@@ -776,7 +843,9 @@ function checkForCommentsSection() {
   }
 }
 
+// Setup YouTube navigation monitoring with multiple fallbacks
 function setupYouTubeNavigation() {
+  // 1. History API monitoring
   try {
     const originalPushState = history.pushState;
     const originalReplaceState = history.replaceState;
@@ -798,6 +867,7 @@ function setupYouTubeNavigation() {
     console.error("Error setting up history monitoring:", e);
   }
   
+  // 2. URL change detection with custom event
   let lastUrl = location.href;
   function checkForUrlChange() {
     if (location.href !== lastUrl) {
@@ -810,6 +880,7 @@ function setupYouTubeNavigation() {
   }
   checkForUrlChange();
   
+  // 3. Mutation observer for YouTube UI changes
   try {
     const observer = new MutationObserver((mutations) => {
       let shouldUpdate = false;
@@ -839,12 +910,14 @@ function setupYouTubeNavigation() {
     console.error("Error setting up mutation observer:", e);
   }
   
+  // 4. Add specific reload event listener
   window.addEventListener('load', function() {
     console.log("Page fully loaded - initializing UI");
     setTimeout(updateUI, 1500);
   });
 }
 
+// Handle cleanup when extension is deactivated
 function deactivateExtension() {
   isExtensionActive = false;
   if (currentInterval) {
@@ -853,6 +926,8 @@ function deactivateExtension() {
   removeExistingAnalyzer();
 }
 
+// Start extension when script is loaded
 window.addEventListener('load', initExtension);
 
+// Handle window unload to clean up
 window.addEventListener('unload', deactivateExtension);

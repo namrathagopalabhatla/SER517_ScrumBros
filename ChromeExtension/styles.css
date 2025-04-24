@@ -30,37 +30,91 @@
   background-color: rgba(255, 255, 255, 0.1);
   color: white;
   border: none;
-  border-radius: 4px;
-  padding: 6px 12px;
-  font-size: 12px;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color 0.2s, transform 0.2s;
+  padding: 0;
 }
 
 .yt-comment-analyzer-account-btn:hover {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: rgba(255, 0, 0, 0.7);
+  transform: scale(1.05);
+}
+
+.yt-comment-analyzer-account-btn .profile-icon {
+  color: white;
 }
 
 /* New Force Reload button styles */
 .yt-comment-analyzer-reload-btn {
-  background-color: rgba(255, 0, 0, 0.7);
+  background-color: rgba(255, 255, 255, 0.2);
   color: white;
   border: none;
-  border-radius: 4px;
-  padding: 6px 12px;
-  font-size: 12px;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   transition: all 0.2s;
+  padding: 0;
 }
 
 .yt-comment-analyzer-reload-btn:hover {
   background-color: rgba(255, 0, 0, 0.9);
+  transform: scale(1.05);
 }
 
 .yt-comment-analyzer-reload-btn:disabled {
   background-color: rgba(255, 0, 0, 0.3);
   cursor: not-allowed;
   opacity: 0.6;
+  transform: scale(1);
+}
+
+.yt-comment-analyzer-reload-btn .reload-icon {
+  color: white;
+  transition: transform 0.3s ease;
+}
+
+/* Spinning animation for reload */
+.yt-comment-analyzer-reload-btn.spinning .reload-icon {
+  animation: spin 1s linear infinite;
+}
+
+/* Success animation */
+.yt-comment-analyzer-reload-btn.success-pulse {
+  animation: success-pulse 0.6s ease;
+}
+
+/* Error animation */
+.yt-comment-analyzer-reload-btn.error-shake {
+  animation: error-shake 0.4s ease;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes success-pulse {
+  0% { transform: scale(1); background-color: rgba(255, 0, 0, 0.7); }
+  50% { transform: scale(1.15); background-color: rgba(255, 0, 0, 0.7); }
+  100% { transform: scale(1); background-color: rgba(255, 0, 0, 0.7); }
+}
+
+@keyframes error-shake {
+  0% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  50% { transform: translateX(3px); }
+  75% { transform: translateX(-3px); }
+  100% { transform: translateX(0); }
 }
 
 .yt-comment-analyzer-container {
