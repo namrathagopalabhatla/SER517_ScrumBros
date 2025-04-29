@@ -103,7 +103,8 @@ async function fetchCommentAnalysis(videoId, forceRetry = false) {
       summary: data.summary || "No analysis available", 
       verdict: data.verdict !== undefined && data.verdict !== null ? data.verdict : 0, 
       totalComments: data.real_total_comments || "No comments available", 
-      mostHelpfulComments: data.most_helpful_comments || []
+      mostHelpfulComments: data.most_helpful_comments || [],
+      createdAt: data.created_at || null
     };
   } catch (error) {
     console.error("Error fetching analysis:", error);
@@ -388,6 +389,13 @@ function updateUIWithAnalysisData(analysis, loadingDiv, leftDiv, rightDiv) {
         helpfulCommentsDiv.appendChild(commentElement);
       });
     }
+
+    const lastUpdatedSpan = document.querySelector('.yt-comment-analyzer-last-updated span');
+    if (lastUpdatedSpan && analysis.createdAt) {
+      const date = new Date(analysis.createdAt);
+      const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+      lastUpdatedSpan.textContent = formattedDate;
+    }
     
     // Update chart data and re-render
     comments_data = analysis.comments_data ? (analysis.comments_data.slice(1) || comments_data) : comments_data;
@@ -443,6 +451,11 @@ async function addAnalyzerContainer() {
   
   const accountContainer = document.createElement('div');
   accountContainer.className = 'yt-comment-analyzer-account';
+
+  const lastUpdatedContainer = document.createElement('div');
+  lastUpdatedContainer.className = 'yt-comment-analyzer-last-updated';
+  lastUpdatedContainer.innerHTML = 'Last Updated: <span>-</span>';
+  accountContainer.appendChild(lastUpdatedContainer)
   
   // Add Reload icon button
   const reloadButton = document.createElement('button');

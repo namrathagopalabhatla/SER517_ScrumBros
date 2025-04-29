@@ -270,3 +270,17 @@
 .yt-comment-analyzer-login-btn:hover {
   background-color: #cc0000;
 }
+
+.yt-comment-analyzer-last-updated {
+  font-size: 12px;
+  color: #aaaaaa;
+  margin-right: 10px;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+
+.yt-comment-analyzer-last-updated span {
+  margin-left: 5px;
+  font-weight: bold;
+}
