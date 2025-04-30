@@ -651,7 +651,7 @@ function renderChart() {
         tooltip: {
           callbacks: {
             label: function(tooltipItem) {
-              return `${tooltipItem.raw} (${((tooltipItem.raw / totalAnalyzed) * 100).toFixed(2)}%)`;
+              return `${((tooltipItem.raw / totalAnalyzed) * 100).toFixed(2)}%`;
             }
           }
         }
