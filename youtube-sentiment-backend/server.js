@@ -27,6 +27,31 @@ app.options('/analyze', (req, res) => {
     res.sendStatus(200);
 });
 
+app.options('/register', (req, res) => {
+  res.set(corsOptions);
+  res.sendStatus(200);
+});
+
+app.options('/verify-email', (req, res) => {
+  res.set(corsOptions);
+  res.sendStatus(200);
+});
+
+app.options('/login', (req, res) => {
+  res.set(corsOptions);
+  res.sendStatus(200);
+});
+
+app.options('/forgot-password', (req, res) => {
+  res.set(corsOptions);
+  res.sendStatus(200);
+});
+
+app.options('/reset-password', (req, res) => {
+  res.set(corsOptions);
+  res.sendStatus(200);
+});
+
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "https://www.youtube.com");
     res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -56,7 +81,7 @@ async function fetchYouTubeComments(videoId) {
                         part: 'snippet',
                         videoId,
                         key: YOUTUBE_API_KEY,
-                        maxResults: 100,
+                        maxResults: 1000,
                         pageToken: nextPageToken,
                         textFormat: 'plainText'
                     }
@@ -80,7 +105,7 @@ async function fetchYouTubeComments(videoId) {
     }
 
     console.log(`Collected ${comments.length} top-level comments.`);
-    return comments.slice(0, maxToCollect); 
+    return comments.slice(0, 500); 
 }
 
 
@@ -169,13 +194,13 @@ ${trimmedComments.map((c, i) => `${i + 1}. ${c}`).join('\n')}
             const cleanedJson = jsonrepair(content);
             const parsedData = JSON.parse(cleanedJson);
 
-            // 🔹 Step 1: Extract and validate numbers
+            // Step 1: Extract and validate numbers
             let totalAnalyzed = parsedData.comments_data[0];  // AI's reported count
             let totalPositive = parsedData.comments_data[1];
             let totalNeutral = parsedData.comments_data[2];
             let totalNegative = parsedData.comments_data[3];
 
-            // 🔹 Step 2: Ensure total is correctly limited to 100
+            // Step 2: Ensure total is correctly limited to 100
             const calculatedTotal = totalPositive + totalNeutral + totalNegative;
 
             if (calculatedTotal !== totalAnalyzed || totalAnalyzed > 100) {
@@ -244,105 +269,100 @@ function authenticateToken(req, res, next) {
     });
 }
 
+async function fetchTotalCommentCount(videoId) {
+    try {
+        const response = await axios.get(
+            'https://www.googleapis.com/youtube/v3/videos',
+            {
+                params: {
+                    part: 'statistics',
+                    id: videoId,
+                    key: YOUTUBE_API_KEY
+                }
+            }
+        );
+
+        const stats = response.data.items?.[0]?.statistics;
+        return stats ? parseInt(stats.commentCount) || 0 : 0;
+    } catch (error) {
+        console.error("Error fetching total comment count:", error.message);
+        return 0; // fallback if API fails
+    }
+}
 
 
 
 // API Endpoint to Analyze a Video
 app.post('/analyze', authenticateToken, async (req, res) => {
     const { videoId, autoRetry = false } = req.body;
-
+  
     if (!videoId) return res.status(400).json({ error: "videoId is required" });
+  
     // Step 1: Check if analysis already exists
     const { data: existingData, error: fetchError } = await supabase
-        .from('video_sentiment_summary')
-        .select('*')
-        .eq('videoid', videoId)
-        .single();
-
+      .from('video_sentiment_summary')
+      .select('*')
+      .eq('videoid', videoId)
+      .single();
+  
+    // Return cached result if not forcing re-analysis
     if (existingData && !autoRetry) {
-        console.log(`Returning cached result for video: ${videoId}`);
-        return res.json(existingData);
+      console.log(`Returning cached result for video: ${videoId}`);
+      return res.json({
+        summary: existingData.summary,
+        most_helpful_comments: existingData.most_helpful_comments,
+        verdict: existingData.verdict,
+        real_total_comments: existingData.real_total_comments,
+        comments_data: existingData.comments_data,
+        created_at: existingData.created_at // existing timestamp
+      });
     }
-
+  
     // Step 2: Fetch comments and analyze sentiment
     console.log(`Fetching comments for video: ${videoId}`);
     const comments = await fetchYouTubeComments(videoId);
-
+  
     console.log(`Analyzing ${comments.length} comments...`);
     const analysis = await analyzeSentiment(comments);
     if (!analysis) return res.status(500).json({ error: "Sentiment analysis failed" });
-
-    // Step 3: Directly use AI's structured response
-    const { summary, most_helpful_comments, verdict, real_total_comments, comments_data } = analysis;
-
-    // Step 4: Save new analysis to Supabase
-    const { error: saveError } = await supabase
-        .from('video_sentiment_summary')
-        .upsert([
-            {
-                videoid: videoId,
-                summary,
-                most_helpful_comments,
-                verdict,
-                real_total_comments,
-                comments_data
-            }
-        ], { onConflict: 'videoid' });
-
+  
+    // Step 3: Extract results
+    const { summary, most_helpful_comments, verdict, comments_data } = analysis;
+    const real_total_comments = await fetchTotalCommentCount(videoId);
+    const now = new Date().toISOString();
+  
+    // Step 4: Upsert with new timestamp
+    const { data: upsertedData, error: saveError } = await supabase
+      .from('video_sentiment_summary')
+      .upsert([
+        {
+          videoid: videoId,
+          summary,
+          most_helpful_comments,
+          verdict,
+          real_total_comments,
+          comments_data,
+          created_at: now // update every time autoRetry is true
+        }
+      ], { onConflict: 'videoid' })
+      .select('summary, most_helpful_comments, verdict, real_total_comments, comments_data, created_at')
+      .single();
+  
     if (saveError) {
-        console.error("Error saving to Supabase:", saveError.message);
-        return res.status(500).json({ error: "Failed to save analysis result." });
+      console.error("Error saving to Supabase:", saveError.message);
+      return res.status(500).json({ error: "Failed to save analysis result." });
     }
-
-    // Step 5: Return the structured AI-generated response
-    res.json({ summary, most_helpful_comments, verdict, real_total_comments, comments_data });
+  
+    res.json({
+      summary: upsertedData.summary,
+      most_helpful_comments: upsertedData.most_helpful_comments,
+      verdict: upsertedData.verdict,
+      real_total_comments: upsertedData.real_total_comments,
+      comments_data: upsertedData.comments_data,
+      created_at: upsertedData.created_at // new timestamp if updated
+    });
 });
 
-
-
-
-app.post('/register', async (req, res) => {
-    const { firstName, lastName, email, password } = req.body;
-  
-    if (!firstName || !lastName || !email || !password) {
-      return res.status(400).json({ error: 'All fields are required.' });
-    }
-  
-    try {
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', email)
-        .maybeSingle();
-  
-      if (existingUser) {
-        return res.status(400).json({ error: 'User already exists.' });
-      }
-  
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const verificationToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '30m' });
-  
-      const { error: insertError } = await supabase.from('users').insert([
-        { email, password: hashedPassword, first_name: firstName, last_name: lastName, is_verified: false },
-      ]);
-  
-      if (insertError) throw insertError;
-  
-      const verificationLink = `https://ser517-scrumbros.onrender.com/verify-email?token=${verificationToken}`;
-  
-      await transporter.sendMail({
-        from: `Support <${process.env.EMAIL_USER}>`,
-        to: email,
-        subject: 'Verify Your Email',
-        html: `<p>Click the link to verify your email:</p><a href="${verificationLink}">${verificationLink}</a>`
-      });
-  
-      res.status(200).json({ message: 'Registration successful. Please verify your email.' });
-    } catch (err) {
-      console.error('Register error:', err);
-      res.status(500).json({ error: 'Server error during registration.' });
-    }
-  });
   
   
   app.get('/verify-email', async (req, res) => {
@@ -416,16 +436,15 @@ app.post('/register', async (req, res) => {
       if (!user) return res.status(404).json({ error: 'User not found.' });
   
       const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '15m' });
-      const resetLink = `https://ser517-scrumbros.onrender.com/reset-password?token=${token}`;
   
       await transporter.sendMail({
         from: `Support <${process.env.EMAIL_USER}>`,
         to: email,
-        subject: 'Reset Your Password',
-        html: `<p>Click the link to reset your password:</p><a href="${resetLink}">${resetLink}</a>`
+        subject: 'Your Password Reset Token',
+        html: `<p>Use the following token to reset your password:</p><p><b>${token}</b></p>`
       });
   
-      res.json({ message: 'Password reset email sent.' });
+      res.json({ message: 'Password reset token sent to email.' });
     } catch (err) {
       console.error('Forgot password error:', err);
       res.status(500).json({ error: 'Server error during password reset request.' });
