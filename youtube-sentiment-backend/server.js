@@ -423,7 +423,48 @@ app.post('/analyze', authenticateToken, async (req, res) => {
       res.status(500).json({ error: 'Server error during login.' });
     }
   });
+  app.post('/register', async (req, res) => {
+    const { firstName, lastName, email, password } = req.body;
   
+    if (!firstName || !lastName || !email || !password) {
+      return res.status(400).json({ error: 'All fields are required.' });
+    }
+  
+    try {
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .maybeSingle();
+  
+      if (existingUser) {
+        return res.status(400).json({ error: 'User already exists.' });
+      }
+  
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const verificationToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '30m' });
+  
+      const { error: insertError } = await supabase.from('users').insert([
+        { email, password: hashedPassword, first_name: firstName, last_name: lastName, is_verified: false },
+      ]);
+  
+      if (insertError) throw insertError;
+  
+      const verificationLink = `https://ser517-scrumbros.onrender.com/verify-email?token=${verificationToken}`;
+  
+      await transporter.sendMail({
+        from: `Support <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: 'Verify Your Email',
+        html: `<p>Click the link to verify your email:</p><a href="${verificationLink}">${verificationLink}</a>`
+      });
+  
+      res.status(200).json({ message: 'Registration successful. Please verify your email.' });
+    } catch (err) {
+      console.error('Register error:', err);
+      res.status(500).json({ error: 'Server error during registration.' });
+    }
+  });
   
   app.post('/forgot-password', async (req, res) => {
     const { email } = req.body;
