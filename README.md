@@ -33,7 +33,7 @@ PORT=3000
 ```
 ⚠️ Important: Never commit your .env file to version control.
 
-🧠 Supabase Setup
+### 🧠 4. Supabase Setup
 📄 Create Sentiment Storage Table
 Run the following SQL in your Supabase SQL Editor:
 
@@ -50,7 +50,7 @@ CREATE TABLE youtube_sentiment (
 ```
 Make sure Supabase authentication is set up with email confirmation enabled if you're using auth features.
 
-### 🚀 Run the Backend Server
+### 🚀 5. Run the Backend Server
 Start the backend server using the following command:
 
 ```bash
@@ -60,7 +60,7 @@ The backend will run on:
 
 http://localhost:3000
 ```
-### 🧪 API Testing
+### 🧪6. API Testing
 📤 Analyze a Video
 Send a POST request to analyze a video by its YouTube video ID:
 
@@ -69,7 +69,7 @@ curl -X POST http://localhost:3000/analyze \
      -H "Content-Type: application/json" \
      -d '{"videoId": "7wWkGWXIshA"}'
 ```
-### 📥 Retrieve Sentiment Results
+### 📥 7. Retrieve Sentiment Results
 Get stored sentiment results for a specific video:
 
 ```bash
