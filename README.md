@@ -1,78 +1,58 @@
-# 📡 YouTube Sentiment Analysis – Backend
+#  YouTube Sentiment Analysis
 
-This is the backend for the **YouTube Sentiment Analyzer Chrome Extension**. It extracts comments from YouTube videos, performs sentiment classification using OpenAI, and stores results in Supabase. It also supports user authentication features (login, registration, email confirmation, password reset) via Supabase.
+##  Chrome Extension with Deployed Backend
+
+This project contains a Chrome Extension that performs sentiment analysis on YouTube comments using a backend API deployed on Render.
+
+The extension allows users to analyze comments, view categorized sentiments, and optionally re-analyze using updated comments. User authentication, email verification, and password recovery are also supported.
 
 ---
 
-## ⚙️ Project Setup
+##  Features
 
-### 🧱 1. Initialize Node Project
-```bash
-mkdir youtube-sentiment-backend
-cd youtube-sentiment-backend
-npm init -y
+-  Sentiment analysis of YouTube comments
+- User authentication (Register, Login, Forgot Password)
+-  Email verification
+- Comment reanalysis
+- Backend hosted on Render
+
+---
+
+##  Installation Guide
+
+### Prerequisites
+
+- Google Chrome browser
+- Internet connection (required to access the hosted backend API)
+
+---
+
+### Install the Chrome Extension Locally
+
+1. Download or clone the repository 
+2. Open Google Chrome and navigate to 
+``` bash
+chrome://extensions 
+``` 
+3. Enable developer mode
+4. Click **Load Unpacked** and select the folder that contains the frontend extension files, which is the **ChromeExtension** folder
+5. The extension should be loaded onto the browser toolbar
+6. Once you load a YouTube video page, the option to sign up will show up.
+7. Activation mail is sent to the user, once activated, user can login, a prompt to **Return to YouTube** will show up.
+8. Once you return to YouTube video page, analysis would be available to the user.
+
+### Backend API (Already deployed on Render)
+- Base API URL
+``` bash
+https://ser517-scrumbros.onrender.com
 ```
 
-### 📦 2. Install Dependencies
-
-Install required Node.js packages:
-
-```bash
-npm install express axios dotenv @supabase/supabase-js openai
+- The extension communicates with the following APIs
+``` bash
+- POST /register - Register a new user
+- POST /login - User login
+- POST /verify-email - Email verification
+- POST /analyze - Analyze YouTube comments
+- POST /forgot-password & POST /reset-password - Password recovery
 ```
 
-### 🔐 3. Create .env File
-Create a .env file in the root of your project and add the following keys:
-
-```bash
-YOUTUBE_API_KEY=your_youtube_api_key
-OPENAI_API_KEY=your_openai_api_key
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your_supabase_anon_key
-PORT=3000
-```
-⚠️ Important: Never commit your .env file to version control.
-
-### 🧠 4. Supabase Setup
-📄 Create Sentiment Storage Table
-Run the following SQL in your Supabase SQL Editor:
-
-```bash
-CREATE TABLE youtube_sentiment (
-    videoID VARCHAR(20) PRIMARY KEY,
-    positive_percentage FLOAT,
-    negative_percentage FLOAT,
-    neutral_percentage FLOAT,
-    irrelevant_percentage FLOAT,
-    scam_percentage FLOAT,
-    summary TEXT
-);
-```
-Make sure Supabase authentication is set up with email confirmation enabled if you're using auth features.
-
-### 🚀 5. Run the Backend Server
-Start the backend server using the following command:
-
-```bash
-node server.js
-The backend will run on:
-
-
-http://localhost:3000
-```
-### 🧪6. API Testing
-📤 Analyze a Video
-Send a POST request to analyze a video by its YouTube video ID:
-
-```bash
-curl -X POST http://localhost:3000/analyze \
-     -H "Content-Type: application/json" \
-     -d '{"videoId": "7wWkGWXIshA"}'
-```
-### 📥 7. Retrieve Sentiment Results
-Get stored sentiment results for a specific video:
-
-```bash
-curl http://localhost:3000/sentiment/7wWkGWXIshA
-```
-### 
