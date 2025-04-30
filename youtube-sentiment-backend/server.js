@@ -81,7 +81,7 @@ async function fetchYouTubeComments(videoId) {
                         part: 'snippet',
                         videoId,
                         key: YOUTUBE_API_KEY,
-                        maxResults: 100,
+                        maxResults: 1000,
                         pageToken: nextPageToken,
                         textFormat: 'plainText'
                     }
@@ -194,13 +194,13 @@ ${trimmedComments.map((c, i) => `${i + 1}. ${c}`).join('\n')}
             const cleanedJson = jsonrepair(content);
             const parsedData = JSON.parse(cleanedJson);
 
-            // 🔹 Step 1: Extract and validate numbers
+            // Step 1: Extract and validate numbers
             let totalAnalyzed = parsedData.comments_data[0];  // AI's reported count
             let totalPositive = parsedData.comments_data[1];
             let totalNeutral = parsedData.comments_data[2];
             let totalNegative = parsedData.comments_data[3];
 
-            // 🔹 Step 2: Ensure total is correctly limited to 100
+            // Step 2: Ensure total is correctly limited to 100
             const calculatedTotal = totalPositive + totalNeutral + totalNegative;
 
             if (calculatedTotal !== totalAnalyzed || totalAnalyzed > 100) {
