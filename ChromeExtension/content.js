@@ -71,7 +71,7 @@ function getVideoId() {
 }
 
 // Fetch comment analysis from API
-async function fetchCommentAnalysis(videoId, forceRetry = false) {
+async function fetchCommentAnalysis(videoId, autoRetry = false) {
   if (!authToken) {
     return {
       summary: "Please log in to view analysis", 
@@ -88,7 +88,7 @@ async function fetchCommentAnalysis(videoId, forceRetry = false) {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${authToken}`
       },
-      body: JSON.stringify({ videoId, forceRetry }) // Added forceRetry flag
+      body: JSON.stringify({ videoId, autoRetry }) // Added autoRetry flag
     });
 
     if (!response.ok) {
@@ -245,7 +245,7 @@ async function forceReloadAnalysis() {
     reloadBtn.classList.add('spinning');
   }
   
-  // Fetch analysis with forceRetry flag
+  // Fetch analysis with autoRetry flag
   try {
     const analysis = await fetchCommentAnalysis(videoId, true);
     
