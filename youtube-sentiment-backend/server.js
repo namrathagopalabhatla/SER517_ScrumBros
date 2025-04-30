@@ -293,7 +293,7 @@ async function fetchTotalCommentCount(videoId) {
 
 
 // API Endpoint to Analyze a Video
-app.post('/analyze', async (req, res) => {
+app.post('/analyze', authenticateToken, async (req, res) => {
     const { videoId, autoRetry = false } = req.body;
   
     if (!videoId) return res.status(400).json({ error: "videoId is required" });
